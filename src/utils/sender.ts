@@ -1,7 +1,7 @@
 import type { SceneBatch, SceneEvent } from '../types'
 
-const STORAGE_KEY = 'sc2_pending'
 const MAX_RETRIES = 2
+const BEACON_MAX_SIZE = 60000
 
 export class Sender {
     private queue: SceneEvent[] = []
@@ -16,38 +16,12 @@ export class Sender {
         private deviceId: string,
         flushInterval: number,
     ) {
-        this.restoreFromStorage()
         this.timer = setInterval(() => this.flush(), flushInterval)
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                this.flush()
-            }
-        })
-        window.addEventListener('beforeunload', () => this.flushSync())
-        window.addEventListener('pagehide', () => this.flushSync())
-    }
-
-    private restoreFromStorage() {
-        try {
-            localStorage.removeItem(STORAGE_KEY)
-        }
-        catch {}
-    }
-
-    private saveToStorage() {
-        if (this.queue.length === 0) {
-            return
-        }
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(this.queue))
-        }
-        catch {}
     }
 
     add(event: SceneEvent) {
         this.queue.push(event)
-        if (this.queue.length >= this.batchSize) {
+        if (event.event === 'rrweb' || this.queue.length >= this.batchSize) {
             this.flush()
         }
     }
@@ -62,35 +36,62 @@ export class Sender {
         const events = this.queue.splice(0)
         const batch = this.buildBatch(events)
         const json = JSON.stringify(batch)
-        const url = `${this.endpoint}?key=${encodeURIComponent(this.apiKey)}`
+        const url = this.buildUrl()
 
         const success = await this.send(json, url)
 
         if (!success) {
             this.queue.unshift(...events)
-            this.saveToStorage()
         }
 
         this.isFlushing = false
     }
 
-    private flushSync() {
+    flushSync() {
         if (this.queue.length === 0) {
             return
         }
 
         const events = this.queue.splice(0)
+        if (events.length === 0) return
+
+        const url = this.buildUrl()
+
+        let chunk: SceneEvent[] = []
+        let chunkSize = 0
+
+        for (const event of events) {
+            const eventJson = JSON.stringify(event)
+            if (chunkSize + eventJson.length > BEACON_MAX_SIZE && chunk.length > 0) {
+                this.sendBeacon(chunk, url)
+                chunk = []
+                chunkSize = 0
+            }
+            chunk.push(event)
+            chunkSize += eventJson.length
+        }
+
+        if (chunk.length > 0) {
+            this.sendBeacon(chunk, url)
+        }
+    }
+
+    destroy() {
+        if (this.timer) {
+            clearInterval(this.timer)
+        }
+        this.flushSync()
+    }
+
+    private sendBeacon(events: SceneEvent[], url: string) {
         const batch = this.buildBatch(events)
         const json = JSON.stringify(batch)
-        const url = `${this.endpoint}?key=${encodeURIComponent(this.apiKey)}`
-
         const blob = new Blob([json], { type: 'application/json' })
-        const sent = navigator.sendBeacon(url, blob)
+        navigator.sendBeacon(url, blob)
+    }
 
-        if (!sent) {
-            this.queue.unshift(...events)
-            this.saveToStorage()
-        }
+    private buildUrl(): string {
+        return `${this.endpoint}?key=${encodeURIComponent(this.apiKey)}`
     }
 
     private buildBatch(events: SceneEvent[]): SceneBatch {
@@ -130,12 +131,5 @@ export class Sender {
             }
         }
         return false
-    }
-
-    destroy() {
-        if (this.timer) {
-            clearInterval(this.timer)
-        }
-        this.flushSync()
     }
 }

@@ -11,8 +11,8 @@ export type * from './types'
 const defaults: Config = {
     endpoint: 'https://my.tamsense.com/api/scenes2',
     debug: false,
-    batchSize: 10,
-    flushInterval: 10000,
+    batchSize: 5,
+    flushInterval: 5000,
     checkpointInterval: 30000,
     mutationDebounce: 200,
     inputDebounce: 1000,
@@ -49,11 +49,15 @@ export class DataClient {
         this.trackers = [snapshotTracker, mutationTracker, actionTracker, rrwebTracker]
         this.trackers.forEach(t => t.start())
 
-        const onUnload = () => this.trackers.forEach(t => t.beforeUnload?.())
-        window.addEventListener('beforeunload', onUnload)
-        window.addEventListener('pagehide', onUnload)
+        const onLeave = () => {
+            this.trackers.forEach(t => t.beforeUnload?.())
+            this.sender.flushSync()
+        }
 
-        console.log(`[dataclient] Initialized. Session: ${sessionId}, Device: ${deviceId}`)
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') onLeave()
+        })
+        window.addEventListener('pagehide', onLeave)
     }
 
     setUser(userId: string) {
