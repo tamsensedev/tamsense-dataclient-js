@@ -2,6 +2,7 @@
     "name": "@tamsensedev/dataclient",
     "type": "module",
     "version": "0.1.2",
+    "license": "MIT",
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
