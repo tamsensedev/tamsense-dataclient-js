@@ -4,6 +4,8 @@
 [![npm downloads](https://img.shields.io/npm/dm/@tamsensedev/dataclient.svg)](https://www.npmjs.com/package/@tamsensedev/dataclient)
 [![license](https://img.shields.io/npm/l/@tamsensedev/dataclient.svg)](https://github.com/tamsensedev/dataclient-js/blob/main/LICENSE)
 
+**[Website](https://tamsense.com)** | **[Documentation](https://tamsense.com)** | **[Product Hunt](https://www.producthunt.com/products/tamsense)**
+
 Capture frontend user behavior for TAMsense to detect friction across onboarding, activation, evaluation, and conversion to paid journeys.
 
 TAMsense helps SaaS companies turn more free users into paying customers by generating specific product recommendations based on the analysis of user behavior across the entire product.
