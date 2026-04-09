@@ -1,7 +1,7 @@
 {
     "name": "@tamsensedev/dataclient",
     "type": "module",
-    "version": "0.1.6",
+    "version": "0.1.7",
     "description": "Session replay & product analytics SDK for web apps",
     "license": "MIT",
     "homepage": "https://github.com/tamsensedev/dataclient-js#readme",
