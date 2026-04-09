@@ -2,7 +2,15 @@
     "name": "@tamsensedev/dataclient",
     "type": "module",
     "version": "0.1.4",
+    "description": "Session replay & product analytics SDK for web apps",
     "license": "MIT",
+    "homepage": "https://github.com/tamsensedev/dataclient-js#readme",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/tamsensedev/dataclient-js"
+    },
+    "bugs": "https://github.com/tamsensedev/dataclient-js/issues",
+    "keywords": ["session-replay", "analytics", "rrweb", "user-tracking", "typescript", "sdk"],
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
