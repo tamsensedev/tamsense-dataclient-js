@@ -87,7 +87,6 @@ const client = new DataClient({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | `string` | `''` | Your project API key |
-| `endpoint` | `string` | `'https://my.tamsense.com/api/scenes2'` | Data endpoint |
 | `idleTimeout` | `number` | `3600000` | Session idle timeout in ms (default 1h) |
 | `batchSize` | `number` | `5` | Events per batch |
 | `flushInterval` | `number` | `5000` | Flush interval in ms |
@@ -163,6 +162,64 @@ const client = new DataClient({
 })
 
 app.provide('dataclient', client)
+```
+
+### Next.js
+
+```js
+// app/providers.tsx
+'use client'
+
+import { useEffect, useRef } from 'react'
+import { DataClient } from '@tamsensedev/dataclient'
+
+export function DataClientProvider() {
+  const clientRef = useRef<DataClient | null>(null)
+
+  useEffect(() => {
+    clientRef.current = new DataClient({
+      apiKey: 'YOUR_API_KEY'
+    })
+  }, [])
+
+  return null
+}
+
+// app/layout.tsx
+import { DataClientProvider } from './providers'
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <DataClientProvider />
+        {children}
+      </body>
+    </html>
+  )
+}
+```
+
+### Angular
+
+```ts
+// app.component.ts
+import { Component, OnInit } from '@angular/core'
+import { DataClient } from '@tamsensedev/dataclient'
+
+@Component({
+  selector: 'app-root',
+  template: '<router-outlet></router-outlet>'
+})
+export class AppComponent implements OnInit {
+  private client: DataClient | null = null
+
+  ngOnInit() {
+    this.client = new DataClient({
+      apiKey: 'YOUR_API_KEY'
+    })
+  }
+}
 ```
 
 ---
