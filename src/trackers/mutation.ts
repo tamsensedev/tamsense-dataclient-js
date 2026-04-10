@@ -1,7 +1,7 @@
 import type { AttrChange, Config, MutationAdd, MutationEvent, TextChange, Tracker } from '../types'
 import type { Sender } from '../utils/sender'
 import { WATCH_ATTRS } from '../constants'
-import { getNodeId, removeNodeId, serializeNode } from '../dom/serializer'
+import { getNodeId, removeNodeId, serializeSubtree } from '../dom/serializer'
 
 export class MutationTracker implements Tracker {
     private observer: MutationObserver | null = null
@@ -59,6 +59,7 @@ export class MutationTracker implements Tracker {
         const mutation: MutationEvent = {
             event: 'mutation',
             timestamp: new Date().toISOString(),
+            url: window.location.href,
             adds: this.pendingAdds,
             removes: this.pendingRemoves,
             text_changes: this.pendingTextChanges,
@@ -92,8 +93,8 @@ export class MutationTracker implements Tracker {
                     continue
                 }
                 const el = node as HTMLElement
-                const serialized = serializeNode(el)
-                if (!serialized) {
+                const nodes = serializeSubtree(el)
+                if (nodes.length === 0) {
                     continue
                 }
 
@@ -102,7 +103,7 @@ export class MutationTracker implements Tracker {
                     continue
                 }
 
-                this.pendingAdds.push({ parentId, node: serialized })
+                this.pendingAdds.push({ parentId, nodes })
             }
 
             for (const node of m.removedNodes) {

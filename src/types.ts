@@ -34,6 +34,7 @@ export interface SnapshotEvent {
 export interface MutationEvent {
     event: 'mutation'
     timestamp: string
+    url: string
     adds: MutationAdd[]
     removes: number[]
     text_changes: TextChange[]
@@ -42,7 +43,7 @@ export interface MutationEvent {
 
 export interface MutationAdd {
     parentId: number
-    node: SerializedNode
+    nodes: SerializedNode[]
 }
 
 export interface TextChange {

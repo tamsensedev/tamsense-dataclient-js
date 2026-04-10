@@ -97,7 +97,7 @@ function getRect(el: HTMLElement): SerializedNode['rect'] {
     }
 }
 
-export function serializeNode(el: HTMLElement): SerializedNode | null {
+function collectNode(el: HTMLElement, out: SerializedNode[]): SerializedNode | null {
     const tag = el.tagName?.toLowerCase()
     if (!tag || SKIP_TAGS.has(tag)) {
         return null
@@ -112,14 +112,6 @@ export function serializeNode(el: HTMLElement): SerializedNode | null {
     const attrs = getAttrs(el)
     const rect = getRect(el)
 
-    const children: number[] = []
-    for (const child of el.children) {
-        const serialized = serializeNode(child as HTMLElement)
-        if (serialized) {
-            children.push(serialized.id)
-        }
-    }
-
     const node: SerializedNode = { id, tag }
     if (text) {
         node.text = text
@@ -133,27 +125,29 @@ export function serializeNode(el: HTMLElement): SerializedNode | null {
     if (rect) {
         node.rect = rect
     }
-    if (children.length > 0) {
-        node.children = children
+
+    out.push(node)
+
+    const childrenIds: number[] = []
+    for (const child of el.children) {
+        const childNode = collectNode(child as HTMLElement, out)
+        if (childNode) {
+            childrenIds.push(childNode.id)
+        }
+    }
+    if (childrenIds.length > 0) {
+        node.children = childrenIds
     }
 
     return node
 }
 
-export function serializeTree(root: HTMLElement): SerializedNode[] {
+export function serializeSubtree(el: HTMLElement): SerializedNode[] {
     const nodes: SerializedNode[] = []
-
-    function walk(el: HTMLElement) {
-        const node = serializeNode(el)
-        if (!node) {
-            return
-        }
-        nodes.push(node)
-        for (const child of el.children) {
-            walk(child as HTMLElement)
-        }
-    }
-
-    walk(root)
+    collectNode(el, nodes)
     return nodes
+}
+
+export function serializeTree(root: HTMLElement): SerializedNode[] {
+    return serializeSubtree(root)
 }
