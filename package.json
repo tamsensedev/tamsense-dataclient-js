@@ -1,7 +1,7 @@
 {
     "name": "@tamsensedev/dataclient",
     "type": "module",
-    "version": "0.1.8",
+    "version": "0.1.9",
     "description": "Session replay & product analytics SDK for web apps",
     "license": "MIT",
     "homepage": "https://tamsense.com",
