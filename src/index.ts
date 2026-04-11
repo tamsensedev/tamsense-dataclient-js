@@ -9,7 +9,7 @@ import { Sender } from './utils/sender'
 export type * from './types'
 
 const defaults: Config = {
-    endpoint: 'https://my.tamsense.com/api/scenes2',
+    endpoint: 'https://my.tamsense.com/api/events',
     debug: false,
     batchSize: 5,
     flushInterval: 5000,
