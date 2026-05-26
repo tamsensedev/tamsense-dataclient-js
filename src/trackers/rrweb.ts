@@ -16,7 +16,7 @@ export class RrwebTracker implements Tracker {
         const scoped = this.config.scoped
         const rootIsScoped = !!scoped && this.root !== document.body && this.root.hasAttribute(scoped)
         const blockSelector = rootIsScoped
-            ? `:not([${scoped}]):not([${scoped}] *):not(:has([${scoped}]))`
+            ? `:not([${scoped}]):not([${scoped}] *):not(:has([${scoped}])):not(head):not(head *)`
             : undefined
 
         this.stopFn = record({
