@@ -12,6 +12,11 @@ export class RrwebTracker implements Tracker {
     ) {}
 
     start() {
+        const scoped = this.config.scoped
+        const blockSelector = scoped
+            ? `:not([${scoped}]):not([${scoped}] *):not(:has([${scoped}]))`
+            : undefined
+
         this.stopFn = record({
             emit: (event) => {
                 const rrwebEvent: RrwebEvent = {
@@ -26,6 +31,7 @@ export class RrwebTracker implements Tracker {
             maskTextSelector: MASK_SELECTOR,
             maskInputOptions: { password: true },
             maskTextFn: text => '*'.repeat(text.length),
+            blockSelector,
             sampling: {
                 mousemove: false,
                 mouseInteraction: true,

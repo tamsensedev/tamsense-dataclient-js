@@ -12,6 +12,7 @@ export class SnapshotTracker implements Tracker {
     constructor(
         private config: Config,
         private sender: Sender,
+        private root: HTMLElement,
     ) {}
 
     start() {
@@ -49,7 +50,7 @@ export class SnapshotTracker implements Tracker {
             timestamp: new Date().toISOString(),
             url: location.href,
             title: document.title,
-            tree: serializeTree(document.body),
+            tree: serializeTree(this.root),
             viewport: getViewport(),
         }
 

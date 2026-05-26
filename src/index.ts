@@ -20,7 +20,10 @@ const defaults: Config = {
     sessionIdKey: 'sc2_sid',
     deviceIdKey: 'sc2_did',
     apiKey: '',
+    scoped: '',
 }
+
+const VALID_ATTR_NAME = /^[a-z][\w-]*$/i
 
 export class DataClient {
     private sender: Sender | null = null
@@ -29,16 +32,24 @@ export class DataClient {
     private deviceId: string
     private idleTimer: ReturnType<typeof setTimeout> | null = null
     private userId: string | null = null
+    private rootEl: HTMLElement | null = null
+    private scopeObserver: MutationObserver | null = null
+    private scopeCheckScheduled = false
+    private activityHandler: (() => void) | null = null
+    private activityTarget: EventTarget | null = null
 
     constructor(options?: Partial<Config>) {
         this.config = { ...defaults, ...options }
+        this.config.scoped = this.normalizeScoped(this.config.scoped)
         this.deviceId = getDeviceId(this.config.deviceIdKey)
 
-        this.startSession()
-
-        document.addEventListener('click', () => this.onActivity(), true)
-        document.addEventListener('input', () => this.onActivity(), true)
-        document.addEventListener('change', () => this.onActivity(), true)
+        if (this.config.scoped) {
+            this.startScopedMode()
+        }
+        else {
+            this.startSession(document.body)
+            this.attachActivityListeners(document)
+        }
     }
 
     setUser(userId: string) {
@@ -49,11 +60,96 @@ export class DataClient {
     excludeSession(reason = '') {
         this.sender?.add({ event: 'exclude', timestamp: new Date().toISOString(), reason })
         this.stopSession()
+        if (this.scopeObserver) {
+            this.scopeObserver.disconnect()
+            this.scopeObserver = null
+        }
+        this.detachActivityListeners()
+    }
+
+    private normalizeScoped(value: string): string {
+        if (!value) {
+            return ''
+        }
+        if (!VALID_ATTR_NAME.test(value)) {
+            if (this.config.debug) {
+                console.warn(`[dataclient] invalid "scoped" attribute name: ${JSON.stringify(value)}. Falling back to non-scoped mode.`)
+            }
+            return ''
+        }
+        return value
+    }
+
+    private startScopedMode() {
+        const initial = this.findRoot()
+        if (initial) {
+            this.onRootAppeared(initial)
+        }
+        this.scopeObserver = new MutationObserver(() => this.scheduleScopeCheck())
+        this.scopeObserver.observe(document.body, { childList: true, subtree: true })
+
+        if (this.config.debug) {
+            console.log(`[dataclient] scoped mode: watching for [${this.config.scoped}]`)
+        }
+    }
+
+    private findRoot(): HTMLElement | null {
+        return document.querySelector<HTMLElement>(`[${this.config.scoped}]`)
+    }
+
+    private scheduleScopeCheck() {
+        if (this.scopeCheckScheduled) {
+            return
+        }
+        this.scopeCheckScheduled = true
+        queueMicrotask(() => {
+            this.scopeCheckScheduled = false
+            this.handleScopeChange()
+        })
+    }
+
+    private handleScopeChange() {
+        const current = this.findRoot()
+        if (current === this.rootEl) {
+            return
+        }
+        if (this.rootEl) {
+            this.onRootDisappeared()
+        }
+        if (current) {
+            this.onRootAppeared(current)
+        }
+    }
+
+    private onRootAppeared(root: HTMLElement) {
+        this.rootEl = root
+        this.attachActivityListeners(root)
+        this.startSession(root)
+        if (this.config.debug) {
+            console.log(`[dataclient] root [${this.config.scoped}] appeared`)
+        }
+    }
+
+    private onRootDisappeared() {
+        if (this.config.debug) {
+            console.log(`[dataclient] root [${this.config.scoped}] removed`)
+        }
+        this.detachActivityListeners()
+        this.stopSession()
+        this.rootEl = null
     }
 
     private onActivity() {
         if (!this.sender) {
-            this.startSession()
+            if (this.config.scoped) {
+                if (!this.rootEl) {
+                    return
+                }
+                this.startSession(this.rootEl)
+            }
+            else {
+                this.startSession(document.body)
+            }
         }
         this.resetIdleTimer()
     }
@@ -64,7 +160,28 @@ export class DataClient {
         this.idleTimer = setTimeout(() => this.stopSession(), this.config.idleTimeout)
     }
 
-    private startSession() {
+    private attachActivityListeners(target: EventTarget) {
+        this.detachActivityListeners()
+        const handler = () => this.onActivity()
+        target.addEventListener('click', handler, true)
+        target.addEventListener('input', handler, true)
+        target.addEventListener('change', handler, true)
+        this.activityHandler = handler
+        this.activityTarget = target
+    }
+
+    private detachActivityListeners() {
+        if (!this.activityHandler || !this.activityTarget) {
+            return
+        }
+        this.activityTarget.removeEventListener('click', this.activityHandler, true)
+        this.activityTarget.removeEventListener('input', this.activityHandler, true)
+        this.activityTarget.removeEventListener('change', this.activityHandler, true)
+        this.activityHandler = null
+        this.activityTarget = null
+    }
+
+    private startSession(root: HTMLElement) {
         const sessionId = generateId()
 
         this.sender = new Sender(
@@ -76,9 +193,9 @@ export class DataClient {
             this.config.flushInterval,
         )
 
-        const snapshotTracker = new SnapshotTracker(this.config, this.sender)
-        const mutationTracker = new MutationTracker(this.config, this.sender, () => snapshotTracker.markMutation())
-        const actionTracker = new ActionTracker(this.config, this.sender)
+        const snapshotTracker = new SnapshotTracker(this.config, this.sender, root)
+        const mutationTracker = new MutationTracker(this.config, this.sender, root, () => snapshotTracker.markMutation())
+        const actionTracker = new ActionTracker(this.config, this.sender, root)
         const rrwebTracker = new RrwebTracker(this.config, this.sender)
 
         this.trackers = [snapshotTracker, mutationTracker, actionTracker, rrwebTracker]
@@ -111,6 +228,7 @@ export class DataClient {
             clearTimeout(this.idleTimer)
             this.idleTimer = null
         }
+        this.trackers.forEach(t => t.beforeUnload?.())
         this.trackers.forEach(t => t.stop())
         this.trackers = []
         if (this.sender) {
@@ -119,7 +237,7 @@ export class DataClient {
         }
 
         if (this.config.debug) {
-            console.log('[dataclient] Session stopped (idle timeout)')
+            console.log('[dataclient] Session stopped')
         }
     }
 }

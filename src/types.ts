@@ -104,6 +104,7 @@ export interface Config {
     sessionIdKey: string
     deviceIdKey: string
     apiKey: string
+    scoped: string
 }
 
 export interface Tracker {

@@ -105,6 +105,7 @@ const client = new DataClient({
 | `idleTimeout` | `number` | `3600000` | Session idle timeout in ms (default 1h) |
 | `batchSize` | `number` | `5` | Events per batch |
 | `flushInterval` | `number` | `5000` | Flush interval in ms |
+| `scoped` | `string` | `''` | Attribute name marking the tracked subtree. When set, the SDK only tracks inside the element carrying this attribute. See [Scoped mode](#scoped-mode). |
 
 ### `client.setUser(userId)`
 
@@ -134,6 +135,37 @@ Add the `dataclient-mask` attribute to mask sensitive content in both recordings
 ```
 
 Passwords are always masked automatically.
+
+---
+
+## Scoped mode
+
+When the SDK is embedded into a third-party site (for example, a widget mounted into a host page), you usually want tracking limited to the widget itself — not the surrounding page.
+
+Pass `scoped` with the attribute name marking the widget root. The SDK will:
+
+- wait until an element with that attribute appears in the DOM before starting a session
+- scope DOM snapshots, mutations, and user actions to that subtree
+- mask everything outside the subtree in the session replay
+- end the session when the element is removed from the DOM
+
+If the attribute element is never present, no data is collected.
+
+```html
+<!-- Host page -->
+<div dataclient-root>
+  <!-- Your widget content -->
+</div>
+```
+
+```js
+new DataClient({
+  apiKey: 'YOUR_API_KEY',
+  scoped: 'dataclient-root',
+})
+```
+
+The attribute name is up to you — `dataclient-root` is just a convention. Any HTML-valid attribute name works (e.g. `data-my-widget`).
 
 ---
 

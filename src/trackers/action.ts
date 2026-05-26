@@ -17,18 +17,25 @@ export class ActionTracker implements Tracker {
     constructor(
         private config: Config,
         private sender: Sender,
+        private root: HTMLElement,
     ) {}
 
+    private get listenerTarget(): EventTarget {
+        return this.config.scoped ? this.root : document
+    }
+
     start() {
-        document.addEventListener('click', this.handleClick, true)
-        document.addEventListener('input', this.handleInput, true)
-        document.addEventListener('change', this.handleChange, true)
+        const target = this.listenerTarget
+        target.addEventListener('click', this.handleClick, true)
+        target.addEventListener('input', this.handleInput, true)
+        target.addEventListener('change', this.handleChange, true)
     }
 
     stop() {
-        document.removeEventListener('click', this.handleClick, true)
-        document.removeEventListener('input', this.handleInput, true)
-        document.removeEventListener('change', this.handleChange, true)
+        const target = this.listenerTarget
+        target.removeEventListener('click', this.handleClick, true)
+        target.removeEventListener('input', this.handleInput, true)
+        target.removeEventListener('change', this.handleChange, true)
     }
 
     beforeUnload() {
@@ -213,7 +220,7 @@ export class ActionTracker implements Tracker {
 
     private findMeaningfulElement(el: HTMLElement): HTMLElement {
         let current: HTMLElement | null = el
-        while (current && current !== document.body) {
+        while (current && current !== this.root && current !== document.body) {
             if (INTERACTIVE_TAGS.has(current.tagName?.toLowerCase())) {
                 return current
             }

@@ -15,12 +15,13 @@ export class MutationTracker implements Tracker {
     constructor(
         private config: Config,
         private sender: Sender,
+        private root: HTMLElement,
         private onMutation: () => void,
     ) {}
 
     start() {
         this.observer = new MutationObserver(mutations => this.handleMutations(mutations))
-        this.observer.observe(document.body, {
+        this.observer.observe(this.root, {
             childList: true,
             subtree: true,
             characterData: true,
