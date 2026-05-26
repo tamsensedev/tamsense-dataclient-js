@@ -81,20 +81,23 @@ export class DataClient {
     }
 
     private startScopedMode() {
-        const initial = this.findRoot()
-        if (initial) {
-            this.onRootAppeared(initial)
-        }
+        const initial = this.resolveScope()
+        this.activateScope(initial)
+
         this.scopeObserver = new MutationObserver(() => this.scheduleScopeCheck())
         this.scopeObserver.observe(document.body, { childList: true, subtree: true })
 
         if (this.config.debug) {
-            console.log(`[dataclient] scoped mode: watching for [${this.config.scoped}]`)
+            console.log(`[dataclient] scoped mode: looking for [${this.config.scoped}], fallback to body`)
         }
     }
 
     private findRoot(): HTMLElement | null {
         return document.querySelector<HTMLElement>(`[${this.config.scoped}]`)
+    }
+
+    private resolveScope(): HTMLElement {
+        return this.findRoot() ?? document.body
     }
 
     private scheduleScopeCheck() {
@@ -109,34 +112,23 @@ export class DataClient {
     }
 
     private handleScopeChange() {
-        const current = this.findRoot()
+        const current = this.resolveScope()
         if (current === this.rootEl) {
             return
         }
-        if (this.rootEl) {
-            this.onRootDisappeared()
-        }
-        if (current) {
-            this.onRootAppeared(current)
-        }
+        this.detachActivityListeners()
+        this.stopSession()
+        this.activateScope(current)
     }
 
-    private onRootAppeared(root: HTMLElement) {
+    private activateScope(root: HTMLElement) {
         this.rootEl = root
         this.attachActivityListeners(root)
         this.startSession(root)
         if (this.config.debug) {
-            console.log(`[dataclient] root [${this.config.scoped}] appeared`)
+            const kind = root === document.body ? 'document.body (fallback)' : `[${this.config.scoped}]`
+            console.log(`[dataclient] scope: ${kind}`)
         }
-    }
-
-    private onRootDisappeared() {
-        if (this.config.debug) {
-            console.log(`[dataclient] root [${this.config.scoped}] removed`)
-        }
-        this.detachActivityListeners()
-        this.stopSession()
-        this.rootEl = null
     }
 
     private onActivity() {
@@ -196,7 +188,7 @@ export class DataClient {
         const snapshotTracker = new SnapshotTracker(this.config, this.sender, root)
         const mutationTracker = new MutationTracker(this.config, this.sender, root, () => snapshotTracker.markMutation())
         const actionTracker = new ActionTracker(this.config, this.sender, root)
-        const rrwebTracker = new RrwebTracker(this.config, this.sender)
+        const rrwebTracker = new RrwebTracker(this.config, this.sender, root)
 
         this.trackers = [snapshotTracker, mutationTracker, actionTracker, rrwebTracker]
         this.trackers.forEach(t => t.start())

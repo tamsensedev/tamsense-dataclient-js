@@ -9,11 +9,13 @@ export class RrwebTracker implements Tracker {
     constructor(
         private config: Config,
         private sender: Sender,
+        private root: HTMLElement,
     ) {}
 
     start() {
         const scoped = this.config.scoped
-        const blockSelector = scoped
+        const rootIsScoped = !!scoped && this.root !== document.body && this.root.hasAttribute(scoped)
+        const blockSelector = rootIsScoped
             ? `:not([${scoped}]):not([${scoped}] *):not(:has([${scoped}]))`
             : undefined
 

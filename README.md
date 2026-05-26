@@ -105,7 +105,7 @@ const client = new DataClient({
 | `idleTimeout` | `number` | `3600000` | Session idle timeout in ms (default 1h) |
 | `batchSize` | `number` | `5` | Events per batch |
 | `flushInterval` | `number` | `5000` | Flush interval in ms |
-| `scoped` | `string` | `''` | Attribute name marking the tracked subtree. When set, the SDK only tracks inside the element carrying this attribute. See [Scoped mode](#scoped-mode). |
+| `scoped` | `string` | `''` | Attribute name that narrows tracking to a specific subtree when present on the page. See [Scoped mode](#scoped-mode). |
 
 ### `client.setUser(userId)`
 
@@ -140,22 +140,20 @@ Passwords are always masked automatically.
 
 ## Scoped mode
 
-When the SDK is embedded into a third-party site (for example, a widget mounted into a host page), you usually want tracking limited to the widget itself — not the surrounding page.
+Pass `scoped` with an attribute name to make tracking page-aware:
 
-Pass `scoped` with the attribute name marking the widget root. The SDK will:
+- If the attribute exists on the current page, the SDK tracks **only inside** that element. DOM snapshots, mutations, and user actions are limited to that subtree, and everything outside is masked in the session replay.
+- If the attribute does not exist on the current page, the SDK tracks **the whole page** as usual.
 
-- wait until an element with that attribute appears in the DOM before starting a session
-- scope DOM snapshots, mutations, and user actions to that subtree
-- mask everything outside the subtree in the session replay
-- end the session when the element is removed from the DOM
-
-If the attribute element is never present, no data is collected.
+The SDK re-evaluates as the DOM changes (useful for SPAs and widgets that mount asynchronously) — when the attribute appears, the scope narrows; when it goes away, the scope widens back.
 
 ```html
-<!-- Host page -->
+<!-- Pages where you want to limit tracking -->
 <div dataclient-root>
-  <!-- Your widget content -->
+  <!-- Only this subtree is tracked -->
 </div>
+
+<!-- Pages without the attribute are tracked in full -->
 ```
 
 ```js
