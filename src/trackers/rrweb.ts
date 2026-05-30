@@ -2,6 +2,7 @@ import type { Config, RrwebEvent, Tracker } from '../types'
 import type { Sender } from '../utils/sender'
 import { record } from 'rrweb'
 import { MASK_SELECTOR } from '../constants'
+import { maskText } from '../dom/mask'
 
 export class RrwebTracker implements Tracker {
     private stopFn: (() => void) | null = null
@@ -31,8 +32,9 @@ export class RrwebTracker implements Tracker {
             recordCrossOriginIframes: false,
             recordCanvas: false,
             maskTextSelector: MASK_SELECTOR,
-            maskInputOptions: { password: true },
             maskTextFn: text => '*'.repeat(text.length),
+            maskAllInputs: true,
+            maskInputFn: (text, el) => el?.closest(MASK_SELECTOR) ? maskText(text) : text,
             blockSelector,
             sampling: {
                 mousemove: false,
