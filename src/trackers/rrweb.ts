@@ -34,7 +34,13 @@ export class RrwebTracker implements Tracker {
             maskTextSelector: MASK_SELECTOR,
             maskTextFn: text => '*'.repeat(text.length),
             maskAllInputs: true,
-            maskInputFn: (text, el) => el?.closest(MASK_SELECTOR) ? maskText(text) : text,
+            maskInputFn: (text, el) => {
+                if (el?.closest(MASK_SELECTOR))
+                    return maskText(text)
+                if (el instanceof HTMLInputElement && el.type === 'password')
+                    return '*'.repeat(text.length)
+                return text
+            },
             blockSelector,
             sampling: {
                 mousemove: false,
