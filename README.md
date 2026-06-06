@@ -106,6 +106,7 @@ const client = new DataClient({
 | `batchSize` | `number` | `5` | Events per batch |
 | `flushInterval` | `number` | `5000` | Flush interval in ms |
 | `scoped` | `string` | `''` | Attribute name that narrows tracking to a specific subtree when present on the page. See [Scoped mode](#scoped-mode). |
+| `version` | `string` | — | Optional app/release version stamped on every event (e.g. `'v1.4.2'` or a git SHA). Lets you attribute captured behavior to a specific production build. See [Versioning](#versioning). |
 
 ### `client.setUser(userId)`
 
@@ -164,6 +165,30 @@ new DataClient({
 ```
 
 The attribute name is up to you — `dataclient-root` is just a convention. Any HTML-valid attribute name works (e.g. `data-my-widget`).
+
+---
+
+## Versioning
+
+Pass `version` to stamp every captured event with the release it came from. This is optional — omit it and events are sent without a version.
+
+```js
+new DataClient({
+  apiKey: 'YOUR_API_KEY',
+  version: 'v1.4.2',
+})
+```
+
+The value is opaque — use whatever identifies a production build for you: a semver tag, a git commit SHA, a CI build number. In most setups your CI already exposes it as an env var, so you can wire it in automatically:
+
+```js
+new DataClient({
+  apiKey: 'YOUR_API_KEY',
+  version: process.env.VERCEL_GIT_COMMIT_SHA, // or GITHUB_SHA, CI_COMMIT_SHA, etc.
+})
+```
+
+Because the version travels with every event, TAMsense can attribute captured behavior to a specific build and compare what users do before and after a change ships — regardless of the order in which features were deployed.
 
 ---
 
