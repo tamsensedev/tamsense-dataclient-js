@@ -105,6 +105,7 @@ export interface Config {
     deviceIdKey: string
     apiKey: string
     scoped: string
+    version?: string
 }
 
 export interface Tracker {
@@ -117,6 +118,7 @@ export interface Tracker {
 export interface SceneBatch {
     session_id: string
     device_id: string
+    version?: string
     events: SceneEvent[]
     sent_at: string
     page_url: string

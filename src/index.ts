@@ -183,6 +183,7 @@ export class DataClient {
             sessionId,
             this.deviceId,
             this.config.flushInterval,
+            this.config.version,
         )
 
         const snapshotTracker = new SnapshotTracker(this.config, this.sender, root)

@@ -15,6 +15,7 @@ export class Sender {
         private sessionId: string,
         private deviceId: string,
         flushInterval: number,
+        private version?: string,
     ) {
         this.timer = setInterval(() => this.flush(), flushInterval)
     }
@@ -98,6 +99,7 @@ export class Sender {
         return {
             session_id: this.sessionId,
             device_id: this.deviceId,
+            ...(this.version ? { version: this.version } : {}),
             events,
             sent_at: new Date().toISOString(),
             page_url: location.href,
