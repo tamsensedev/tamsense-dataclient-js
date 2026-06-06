@@ -36,7 +36,8 @@
         "dev": "tsup --watch",
         "clean": "rimraf dist",
         "lint": "eslint .",
-        "lint:fix": "eslint . --fix"
+        "lint:fix": "eslint . --fix",
+        "version:patch": "npm version patch & git push --tags"
     },
     "dependencies": {
         "rrweb": "^2.0.0-alpha.18"
