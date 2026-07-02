@@ -1,6 +1,7 @@
 import type { AttrChange, Config, MutationAdd, MutationEvent, TextChange, Tracker } from '../types'
 import type { Sender } from '../utils/sender'
 import { WATCH_ATTRS } from '../constants'
+import { isInputMaskingEnabled, isMasked, isUserInputElement, maskText } from '../dom/mask'
 import { getNodeId, removeNodeId, serializeSubtree } from '../dom/serializer'
 
 export class MutationTracker implements Tracker {
@@ -119,9 +120,13 @@ export class MutationTracker implements Tracker {
             }
 
             if (m.type === 'characterData' && m.target.parentElement) {
-                const parentId = getNodeId(m.target.parentElement)
+                const parent = m.target.parentElement
+                const parentId = getNodeId(parent)
                 if (parentId !== null) {
-                    const text = m.target.textContent?.trim().slice(0, 200) || ''
+                    let text = m.target.textContent?.trim().slice(0, 200) || ''
+                    if ((isInputMaskingEnabled() && isUserInputElement(parent)) || isMasked(parent)) {
+                        text = maskText(text)
+                    }
                     this.pendingTextChanges.push({ id: parentId, text })
                 }
             }
@@ -129,12 +134,16 @@ export class MutationTracker implements Tracker {
             if (m.type === 'attributes' && m.attributeName) {
                 const id = getNodeId(m.target)
                 if (id !== null) {
-                    const value = (m.target as HTMLElement).getAttribute(m.attributeName)
-                    this.pendingAttrChanges.push({
-                        id,
-                        attr: m.attributeName,
-                        value: value?.slice(0, 200) ?? null,
-                    })
+                    const el = m.target as HTMLElement
+                    const attr = m.attributeName
+                    let value = el.getAttribute(attr)?.slice(0, 200) ?? null
+                    if (value !== null) {
+                        const maskAsInput = attr === 'value' && isInputMaskingEnabled() && isUserInputElement(el)
+                        if (maskAsInput || ((attr === 'value' || attr === 'placeholder') && isMasked(el))) {
+                            value = maskText(value)
+                        }
+                    }
+                    this.pendingAttrChanges.push({ id, attr, value })
                 }
             }
         }

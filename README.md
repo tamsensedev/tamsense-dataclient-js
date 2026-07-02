@@ -106,6 +106,7 @@ const client = new DataClient({
 | `batchSize` | `number` | `5` | Events per batch |
 | `flushInterval` | `number` | `5000` | Flush interval in ms |
 | `scoped` | `string` | `''` | Attribute name that narrows tracking to a specific subtree when present on the page. See [Scoped mode](#scoped-mode). |
+| `maskAllInputs` | `boolean` | `true` | Mask everything users type or select — inputs, textareas, selects, contenteditable — in both recordings and collected events. Enabled by default; set to `false` explicitly to capture raw input values. See [Data masking](#data-masking). |
 | `version` | `string` | — | Optional app/release version stamped on every event (e.g. `'v1.4.2'` or a git SHA). Lets you attribute captured behavior to a specific production build. See [Versioning](#versioning). |
 
 ### `client.setUser(userId)`
@@ -126,16 +127,27 @@ client.excludeSession('internal user')
 
 ### Data masking
 
-Add the `dataclient-mask` attribute to mask sensitive content in both recordings and collected events.
+**All user input is masked by default.** Everything a user types or selects — `<input>`, `<textarea>`, `<select>`, `contenteditable` elements — is replaced with `*` characters in session replays, DOM snapshots, and action events before leaving the browser. Only the length of the value is preserved.
+
+To capture raw input values, opt out explicitly:
+
+```js
+new DataClient({
+  apiKey: 'YOUR_API_KEY',
+  maskAllInputs: false, // capture what users type (passwords stay masked)
+})
+```
+
+Passwords are always masked automatically, even with `maskAllInputs: false`.
+
+To mask other sensitive content (not just inputs), add the `dataclient-mask` attribute — it fully replaces text with `*` in both recordings and collected events:
 
 ```html
 <div dataclient-mask>
-  <p>John Doe</p>        <!-- "Jo******" -->
-  <input value="secret">  <!-- "se****" -->
+  <p>John Doe</p>        <!-- "********" -->
+  <input value="secret">  <!-- "******" -->
 </div>
 ```
-
-Passwords are always masked automatically.
 
 ---
 

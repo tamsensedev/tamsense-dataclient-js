@@ -1,7 +1,7 @@
 import type { SerializedNode } from '../types'
 import { RECORD_ATTRS, SKIP_TAGS } from '../constants'
 import { getElementIcon } from './icon'
-import { isMasked, maskText } from './mask'
+import { isInputMaskingEnabled, isMasked, isUserInputElement, maskText } from './mask'
 
 let nextId = 1
 const nodeToId = new WeakMap<Node, number>()
@@ -61,7 +61,10 @@ function getDirectText(el: HTMLElement): string {
         }
     }
     const truncated = text.slice(0, 200)
-    return isMasked(el) ? maskText(truncated) : truncated
+    if ((isInputMaskingEnabled() && isUserInputElement(el)) || isMasked(el)) {
+        return maskText(truncated)
+    }
+    return truncated
 }
 
 function getAttrs(el: HTMLElement): Record<string, string> | undefined {
@@ -73,7 +76,8 @@ function getAttrs(el: HTMLElement): Record<string, string> | undefined {
         const value = el.getAttribute(name)
         if (value !== null && value !== '') {
             let v = value.slice(0, 200)
-            if (masked && (name === 'value' || name === 'placeholder')) {
+            const maskAsInput = name === 'value' && isInputMaskingEnabled() && isUserInputElement(el)
+            if (maskAsInput || (masked && (name === 'value' || name === 'placeholder'))) {
                 v = maskText(v)
             }
             attrs[name] = v

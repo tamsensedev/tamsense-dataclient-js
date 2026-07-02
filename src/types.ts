@@ -105,6 +105,7 @@ export interface Config {
     deviceIdKey: string
     apiKey: string
     scoped: string
+    maskAllInputs: boolean
     version?: string
 }
 

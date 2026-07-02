@@ -1,7 +1,7 @@
 import type { ActionEvent, Config, Tracker } from '../types'
 import type { Sender } from '../utils/sender'
 import { INTERACTIVE_ROLES, INTERACTIVE_TAGS, TEXT_INPUT_TYPES } from '../constants'
-import { isMasked, maskText } from '../dom/mask'
+import { isInputMaskingEnabled, isMasked, maskText } from '../dom/mask'
 import { getNodeId } from '../dom/serializer'
 import { getViewport } from '../dom/viewport'
 import { RrwebTracker } from './rrweb'
@@ -123,7 +123,9 @@ export class ActionTracker implements Tracker {
 
         const info = this.getElementInfo(target)
         const type = (target as HTMLInputElement).type?.toLowerCase() || ''
-        const value = (info.masked || type === 'password') ? maskText(rawValue) : rawValue
+        const value = (isInputMaskingEnabled() || type === 'password' || info.masked)
+            ? maskText(rawValue)
+            : rawValue
 
         const action: ActionEvent = {
             event: 'action',
@@ -168,7 +170,9 @@ export class ActionTracker implements Tracker {
 
         if (tag === 'select') {
             const selectValue = (target as HTMLSelectElement).value
-            action.value = info.masked ? maskText(selectValue) : selectValue
+            action.value = (isInputMaskingEnabled() || info.masked)
+                ? maskText(selectValue)
+                : selectValue
         }
         else if (tag === 'input') {
             const type = (target as HTMLInputElement).type

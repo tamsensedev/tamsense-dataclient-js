@@ -1,9 +1,10 @@
 import type { Config, Tracker } from './types'
+import { setInputMasking } from './dom/mask'
 import { ActionTracker } from './trackers/action'
 import { MutationTracker } from './trackers/mutation'
 import { RrwebTracker } from './trackers/rrweb'
 import { SnapshotTracker } from './trackers/snapshot'
-import { generateId, getDeviceId } from './utils/identity'
+import { clearSession, getDeviceId, getSessionId, touchSession } from './utils/identity'
 import { Sender } from './utils/sender'
 
 export type * from './types'
@@ -21,6 +22,7 @@ const defaults: Config = {
     deviceIdKey: 'sc2_did',
     apiKey: '',
     scoped: '',
+    maskAllInputs: true,
 }
 
 const VALID_ATTR_NAME = /^[a-z][\w-]*$/i
@@ -30,6 +32,7 @@ export class DataClient {
     private trackers: Tracker[] = []
     private config: Config
     private deviceId: string
+    private sessionId: string | null = null
     private idleTimer: ReturnType<typeof setTimeout> | null = null
     private userId: string | null = null
     private rootEl: HTMLElement | null = null
@@ -41,6 +44,7 @@ export class DataClient {
     constructor(options?: Partial<Config>) {
         this.config = { ...defaults, ...options }
         this.config.scoped = this.normalizeScoped(this.config.scoped)
+        setInputMasking(this.config.maskAllInputs !== false)
         this.deviceId = getDeviceId(this.config.deviceIdKey)
 
         if (this.config.scoped) {
@@ -59,6 +63,7 @@ export class DataClient {
 
     excludeSession(reason = '') {
         this.sender?.add({ event: 'exclude', timestamp: new Date().toISOString(), reason })
+        clearSession(this.config.sessionIdKey)
         this.stopSession()
         if (this.scopeObserver) {
             this.scopeObserver.disconnect()
@@ -143,13 +148,19 @@ export class DataClient {
                 this.startSession(document.body)
             }
         }
+        if (this.sessionId) {
+            touchSession(this.config.sessionIdKey, this.sessionId)
+        }
         this.resetIdleTimer()
     }
 
     private resetIdleTimer() {
         if (this.idleTimer)
             clearTimeout(this.idleTimer)
-        this.idleTimer = setTimeout(() => this.stopSession(), this.config.idleTimeout)
+        this.idleTimer = setTimeout(() => {
+            clearSession(this.config.sessionIdKey)
+            this.stopSession()
+        }, this.config.idleTimeout)
     }
 
     private attachActivityListeners(target: EventTarget) {
@@ -174,7 +185,8 @@ export class DataClient {
     }
 
     private startSession(root: HTMLElement) {
-        const sessionId = generateId()
+        const sessionId = getSessionId(this.config.sessionIdKey, this.config.idleTimeout)
+        this.sessionId = sessionId
 
         this.sender = new Sender(
             this.config.endpoint,
@@ -224,6 +236,7 @@ export class DataClient {
         this.trackers.forEach(t => t.beforeUnload?.())
         this.trackers.forEach(t => t.stop())
         this.trackers = []
+        this.sessionId = null
         if (this.sender) {
             this.sender.destroy()
             this.sender = null
