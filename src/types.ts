@@ -106,6 +106,7 @@ export interface Config {
     apiKey: string
     scoped: string
     maskAllInputs: boolean
+    rrwebCheckpointInterval: number
     version?: string
 }
 

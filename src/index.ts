@@ -23,6 +23,7 @@ const defaults: Config = {
     apiKey: '',
     scoped: '',
     maskAllInputs: true,
+    rrwebCheckpointInterval: 10 * 60 * 1000,
 }
 
 const VALID_ATTR_NAME = /^[a-z][\w-]*$/i
