@@ -47,6 +47,7 @@ export class RrwebTracker implements Tracker {
                 return text
             },
             blockSelector,
+            checkoutEveryNms: this.config.rrwebCheckpointInterval || undefined,
             sampling: {
                 mousemove: false,
                 mouseInteraction: true,
