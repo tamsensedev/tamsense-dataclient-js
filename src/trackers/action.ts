@@ -70,6 +70,7 @@ export class ActionTracker implements Tracker {
             type: 'click',
             targetId: info.targetId,
             tag: info.tag,
+            role: info.role,
             text: info.text,
             url: location.href,
             state: info.state,
@@ -77,7 +78,7 @@ export class ActionTracker implements Tracker {
         }
 
         if (this.config.debug) {
-            console.log(`[dataclient] click: ${info.tag} "${info.text}"`)
+            console.log(`[dataclient] click: ${info.tag}${info.role ? `[role=${info.role}]` : ''} "${info.text}"`)
         }
 
         this.sender.add(action)
@@ -133,6 +134,7 @@ export class ActionTracker implements Tracker {
             type: 'input',
             targetId: info.targetId,
             tag: info.tag,
+            role: info.role,
             text: info.text,
             url: location.href,
             value,
@@ -163,6 +165,7 @@ export class ActionTracker implements Tracker {
             type: 'change',
             targetId: info.targetId,
             tag: info.tag,
+            role: info.role,
             text: info.text,
             url: location.href,
             viewport: getViewport(),
@@ -215,6 +218,7 @@ export class ActionTracker implements Tracker {
 
         return {
             tag,
+            role: el.getAttribute?.('role')?.trim().slice(0, 50) || '',
             text: finalText.slice(0, 100),
             targetId: getNodeId(el),
             state: (el as HTMLButtonElement).disabled ? 'disabled' : 'enabled',

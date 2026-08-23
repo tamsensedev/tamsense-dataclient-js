@@ -63,6 +63,7 @@ export interface ActionEvent {
     type: 'click' | 'input' | 'change'
     targetId: number | null
     tag: string
+    role: string
     text: string
     url: string
     value?: string
