@@ -1,2 +1,11 @@
+shellEmulator: true
+
+trustPolicy: no-downgrade
+
+# chokidar shipped SLSA provenance in 4.0.1 and dropped it from 4.0.2 onwards, which
+# reads as a trust downgrade. Publisher is still paulmillr, the package author, and
+# tsup@8 pins ^4.0.3 — so there is no signed version we can move to.
+trustPolicyExclude: [chokidar]
+
 allowBuilds:
-  esbuild: true
+    esbuild: true
