@@ -1,41 +1,45 @@
-import type { SceneBatch, SceneEvent } from '../types'
-
-const MAX_RETRIES = 2
-
-const BEACON_MAX_SIZE = 60_000
+import type { Config, SceneBatch, SceneEvent } from '../types'
 
 const MAX_REQUEST_BYTES = 256 * 1024
-
-const MAX_QUEUE_BYTES = 4 * 1024 * 1024
 
 const MAX_STORED_BYTES = 1024 * 1024
 
 const MAX_BACKOFF_MS = 30_000
 const STORAGE_PREFIX = 'sc2_pending_'
 
+interface Entry {
+    event: SceneEvent
+    json: string
+    attempts: number
+}
+
 type SendResult = 'ok' | 'retry' | 'drop'
 
 export class Sender {
-    private queue: SceneEvent[] = []
+    private queue: Entry[] = []
+    private queueBytes = 0
+    private inflight: Entry[] = []
     private timer: ReturnType<typeof setInterval> | null = null
     private retryTimer: ReturnType<typeof setTimeout> | null = null
     private flushPromise: Promise<void> = Promise.resolve()
     private backoffMs = 0
     private nextAttemptAt = 0
+    private destroyed = false
     private storageKey: string
 
     constructor(
-        private endpoint: string,
-        private apiKey: string,
-        private batchSize: number,
+        private config: Config,
         private sessionId: string,
         private deviceId: string,
-        flushInterval: number,
-        private version?: string,
     ) {
         this.storageKey = `${STORAGE_PREFIX}${sessionId}`
-        this.queue = this.loadStored()
-        this.timer = setInterval(() => this.flush(), flushInterval)
+        this.pruneStorage()
+
+        for (const event of this.loadStored()) {
+            this.enqueue(event)
+        }
+
+        this.timer = setInterval(() => this.flush(), config.flushInterval)
 
         if (this.queue.length > 0) {
             this.flush()
@@ -43,12 +47,15 @@ export class Sender {
     }
 
     add(event: SceneEvent) {
-        this.queue.push(event)
+        if (this.destroyed)
+            return
+
+        this.enqueue(event)
 
         const isRrwebSnapshot = event.event === 'rrweb'
             && event.rrwebEvent.type === 2
 
-        if (isRrwebSnapshot || this.queue.length >= this.batchSize) {
+        if (isRrwebSnapshot || this.queue.length >= this.config.batchSize) {
             this.flush()
         }
     }
@@ -57,28 +64,33 @@ export class Sender {
         this.flushPromise = this.flushPromise.then(() => this.doFlush())
     }
 
-    flushSync() {
-        if (this.queue.length === 0)
-            return
+    persist() {
+        this.store()
+    }
 
-        const entries = this.serialize(this.queue.splice(0))
-        const beaconEvents: SceneEvent[] = []
-        let bytes = 0
+    flushOnUnload() {
+        if (this.config.beacon && this.isHealthy() && this.queue.length > 0) {
+            const envelope = JSON.stringify(this.buildBatch([])).length
+            const limit = this.config.beaconMaxBytes - envelope
+            const events: SceneEvent[] = []
+            let bytes = 0
+            let payload = 0
 
-        for (const entry of entries) {
-            if (bytes + entry.json.length > BEACON_MAX_SIZE)
-                break
-            beaconEvents.push(entry.event)
-            bytes += entry.json.length
+            for (const entry of this.queue) {
+                if (payload + entry.json.length + 1 > limit)
+                    break
+                events.push(entry.event)
+                bytes += entry.json.length
+                payload += entry.json.length + 1
+            }
+
+            if (events.length > 0 && this.sendBeacon(events)) {
+                this.queue.splice(0, events.length)
+                this.queueBytes -= bytes
+            }
         }
 
-        if (beaconEvents.length > 0) {
-            this.sendBeacon(beaconEvents)
-        }
-
-        const leftover = entries.slice(beaconEvents.length).map(e => e.event)
-        this.queue = leftover.concat(this.queue)
-        this.store(leftover)
+        this.store()
     }
 
     destroy() {
@@ -90,39 +102,78 @@ export class Sender {
             clearTimeout(this.retryTimer)
             this.retryTimer = null
         }
-        this.flushSync()
+        this.destroyed = true
+        this.flush()
+    }
+
+    private isHealthy(): boolean {
+        return Date.now() >= this.nextAttemptAt
+    }
+
+    private enqueue(event: SceneEvent) {
+        const json = JSON.stringify(event)
+        this.queue.push({ event, json, attempts: 0 })
+        this.queueBytes += json.length
+
+        while (this.queueBytes > this.config.maxQueueBytes && this.queue.length > 0) {
+            this.queueBytes -= this.queue.shift()!.json.length
+        }
+    }
+
+    private requeue(entries: Entry[]) {
+        this.queue = entries.concat(this.queue)
+        for (const entry of entries) {
+            this.queueBytes += entry.json.length
+        }
     }
 
     private async doFlush() {
-        if (this.queue.length === 0 || Date.now() < this.nextAttemptAt)
+        if (this.queue.length === 0)
             return
 
-        const entries = this.trim(this.serialize(this.queue.splice(0)))
+        if (!this.isHealthy()) {
+            if (this.destroyed)
+                this.store()
+            return
+        }
+
+        const entries = this.queue.splice(0)
+        this.queueBytes = 0
         const url = this.buildUrl()
 
         for (let i = 0; i < entries.length;) {
-            const request: SceneEvent[] = []
+            const start = i
             let bytes = 0
 
-            while (i < entries.length && (request.length === 0 || bytes + entries[i]!.json.length <= MAX_REQUEST_BYTES)) {
+            while (i < entries.length && (i === start || bytes + entries[i]!.json.length <= MAX_REQUEST_BYTES)) {
                 bytes += entries[i]!.json.length
-                request.push(entries[i]!.event)
                 i++
             }
 
-            const result = await this.send(JSON.stringify(this.buildBatch(request)), url)
+            const request = entries.slice(start, i)
+            this.inflight = entries.slice(start)
+
+            const result = await this.send(JSON.stringify(this.buildBatch(request.map(e => e.event))), url)
+            this.inflight = []
 
             if (result === 'retry') {
-                const unsent = request.concat(entries.slice(i).map(e => e.event))
-                this.queue = unsent.concat(this.queue)
-                this.scheduleRetry()
+                for (const entry of request) {
+                    entry.attempts++
+                }
+                const kept = request.filter(e => e.attempts < this.config.maxAttempts)
+                this.requeue(kept.concat(entries.slice(i)))
+
+                if (this.destroyed)
+                    this.store()
+                else
+                    this.scheduleRetry()
                 return
             }
         }
 
         this.backoffMs = 0
         this.nextAttemptAt = 0
-        this.clearStored()
+        this.store()
     }
 
     private scheduleRetry() {
@@ -131,7 +182,7 @@ export class Sender {
             : Math.min(this.backoffMs * 2, MAX_BACKOFF_MS)
         this.nextAttemptAt = Date.now() + this.backoffMs
 
-        this.store(this.queue)
+        this.store()
 
         if (this.retryTimer) {
             clearTimeout(this.retryTimer)
@@ -143,46 +194,18 @@ export class Sender {
         }, this.backoffMs)
     }
 
-    private serialize(events: SceneEvent[]): { event: SceneEvent, json: string }[] {
-        return events.map(event => ({ event, json: JSON.stringify(event) }))
-    }
-
-    private trim(entries: { event: SceneEvent, json: string }[]): { event: SceneEvent, json: string }[] {
-        let total = 0
-        for (const entry of entries) {
-            total += entry.json.length
-        }
-        if (total <= MAX_QUEUE_BYTES) {
-            return entries
-        }
-
-        let from = 0
-        while (from < entries.length && total > MAX_QUEUE_BYTES) {
-            total -= entries[from]!.json.length
-            from++
-        }
-        return entries.slice(from)
-    }
-
-    private sendBeacon(events: SceneEvent[]) {
-        const json = JSON.stringify(this.buildBatch(events))
-        const url = this.buildUrl()
-
-        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
-            const blob = new Blob([json], { type: 'application/json' })
-            if (navigator.sendBeacon(url, blob))
-                return
-        }
+    private sendBeacon(events: SceneEvent[]): boolean {
+        if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function')
+            return false
 
         try {
-            fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: json,
-                keepalive: true,
-            }).catch(() => {})
+            const json = JSON.stringify(this.buildBatch(events))
+            const blob = new Blob([json], { type: 'application/json' })
+            return navigator.sendBeacon(this.buildUrl(), blob)
         }
-        catch {}
+        catch {
+            return false
+        }
     }
 
     private storage(): Storage | null {
@@ -194,27 +217,47 @@ export class Sender {
         }
     }
 
-    private store(events: SceneEvent[]) {
+    private pruneStorage() {
         const storage = this.storage()
         if (!storage)
             return
 
         try {
-            if (events.length === 0) {
+            const stale: string[] = []
+            for (let i = 0; i < storage.length; i++) {
+                const key = storage.key(i)
+                if (key && key.startsWith(STORAGE_PREFIX) && key !== this.storageKey)
+                    stale.push(key)
+            }
+            for (const key of stale) {
+                storage.removeItem(key)
+            }
+        }
+        catch {}
+    }
+
+    private store() {
+        const storage = this.storage()
+        if (!storage)
+            return
+
+        try {
+            const entries = this.inflight.concat(this.queue)
+            if (entries.length === 0) {
                 storage.removeItem(this.storageKey)
                 return
             }
-            const kept: SceneEvent[] = []
+            const kept: string[] = []
             let bytes = 0
-            for (let i = events.length - 1; i >= 0; i--) {
-                const size = JSON.stringify(events[i]).length
+            for (let i = entries.length - 1; i >= 0; i--) {
+                const size = entries[i]!.json.length
                 if (bytes + size > MAX_STORED_BYTES)
                     break
-                kept.push(events[i]!)
+                kept.push(entries[i]!.json)
                 bytes += size
             }
             kept.reverse()
-            storage.setItem(this.storageKey, JSON.stringify(kept))
+            storage.setItem(this.storageKey, `[${kept.join(',')}]`)
         }
         catch {}
     }
@@ -237,23 +280,15 @@ export class Sender {
         }
     }
 
-    private clearStored() {
-        const storage = this.storage()
-        try {
-            storage?.removeItem(this.storageKey)
-        }
-        catch {}
-    }
-
     private buildUrl(): string {
-        return `${this.endpoint}?key=${encodeURIComponent(this.apiKey)}`
+        return `${this.config.endpoint}?key=${encodeURIComponent(this.config.apiKey)}`
     }
 
     private buildBatch(events: SceneEvent[]): SceneBatch {
         return {
             session_id: this.sessionId,
             device_id: this.deviceId,
-            ...(this.version ? { version: this.version } : {}),
+            ...(this.config.version ? { version: this.config.version } : {}),
             events,
             sent_at: new Date().toISOString(),
             page_url: location.href,
@@ -268,27 +303,33 @@ export class Sender {
     }
 
     private async send(json: string, url: string): Promise<SendResult> {
-        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: json,
-                })
-                if (response.ok)
-                    return 'ok'
+        const controller = typeof AbortController === 'undefined' ? null : new AbortController()
+        const timeout = controller
+            ? setTimeout(() => controller.abort(), this.config.requestTimeout)
+            : null
 
-                if (response.status >= 400 && response.status < 500
-                    && response.status !== 408 && response.status !== 429) {
-                    return 'drop'
-                }
-            }
-            catch {}
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: json,
+                signal: controller?.signal,
+            })
+            if (response.ok)
+                return 'ok'
 
-            if (attempt < MAX_RETRIES) {
-                await new Promise(r => setTimeout(r, (attempt + 1) * 200))
+            if (response.status >= 400 && response.status < 500
+                && response.status !== 408 && response.status !== 429) {
+                return 'drop'
             }
+            return 'retry'
         }
-        return 'retry'
+        catch {
+            return 'retry'
+        }
+        finally {
+            if (timeout)
+                clearTimeout(timeout)
+        }
     }
 }

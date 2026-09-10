@@ -107,6 +107,11 @@ export interface Config {
     scoped: string
     maskAllInputs: boolean
     rrwebCheckpointInterval: number
+    requestTimeout: number
+    maxAttempts: number
+    maxQueueBytes: number
+    beacon: boolean
+    beaconMaxBytes: number
     version?: string
 }
 
