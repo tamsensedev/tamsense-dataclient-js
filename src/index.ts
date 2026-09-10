@@ -24,6 +24,11 @@ const defaults: Config = {
     scoped: '',
     maskAllInputs: true,
     rrwebCheckpointInterval: 10 * 60 * 1000,
+    requestTimeout: 10_000,
+    maxAttempts: 6,
+    maxQueueBytes: 2 * 1024 * 1024,
+    beacon: true,
+    beaconMaxBytes: 16_000,
 }
 
 const VALID_ATTR_NAME = /^[a-z][\w-]*$/i
@@ -55,6 +60,18 @@ export class DataClient {
             this.startSession(document.body)
             this.attachActivityListeners(document)
         }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState !== 'hidden')
+                return
+            this.trackers.forEach(t => t.beforeUnload?.())
+            this.sender?.flush()
+            this.sender?.persist()
+        })
+        window.addEventListener('pagehide', () => {
+            this.trackers.forEach(t => t.beforeUnload?.())
+            this.sender?.flushOnUnload()
+        })
     }
 
     setUser(userId: string) {
@@ -189,15 +206,7 @@ export class DataClient {
         const sessionId = getSessionId(this.config.sessionIdKey, this.config.idleTimeout)
         this.sessionId = sessionId
 
-        this.sender = new Sender(
-            this.config.endpoint,
-            this.config.apiKey,
-            this.config.batchSize,
-            sessionId,
-            this.deviceId,
-            this.config.flushInterval,
-            this.config.version,
-        )
+        this.sender = new Sender(this.config, sessionId, this.deviceId)
 
         const snapshotTracker = new SnapshotTracker(this.config, this.sender, root)
         const mutationTracker = new MutationTracker(this.config, this.sender, root, () => snapshotTracker.markMutation())
@@ -212,17 +221,6 @@ export class DataClient {
         }
 
         this.resetIdleTimer()
-
-        const onLeave = () => {
-            this.trackers.forEach(t => t.beforeUnload?.())
-            this.sender?.flushSync()
-        }
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden')
-                onLeave()
-        })
-        window.addEventListener('pagehide', onLeave)
 
         if (this.config.debug) {
             console.log(`[dataclient] Session started: ${sessionId}`)

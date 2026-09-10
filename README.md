@@ -108,6 +108,11 @@ const client = new DataClient({
 | `scoped` | `string` | `''` | Attribute name that narrows tracking to a specific subtree when present on the page. See [Scoped mode](#scoped-mode). |
 | `maskAllInputs` | `boolean` | `true` | Mask everything users type or select — inputs, textareas, selects, contenteditable — in both recordings and collected events. Enabled by default; set to `false` explicitly to capture raw input values. See [Data masking](#data-masking). |
 | `version` | `string` | — | Optional app/release version stamped on every event (e.g. `'v1.4.2'` or a git SHA). Lets you attribute captured behavior to a specific production build. See [Versioning](#versioning). |
+| `requestTimeout` | `number` | `10000` | Max time in ms for a single upload request before it is aborted. See [Transport](#transport). |
+| `maxAttempts` | `number` | `6` | How many failed uploads an event survives before it is dropped. |
+| `maxQueueBytes` | `number` | `2097152` | In-memory queue cap (2 MB). Oldest events are dropped first. |
+| `beacon` | `boolean` | `true` | Use `navigator.sendBeacon` on `pagehide`. Set to `false` if your app relies on the browser's keepalive quota during unload. |
+| `beaconMaxBytes` | `number` | `16000` | Upper bound of a single `sendBeacon` payload. |
 
 ### `client.setUser(userId)`
 
@@ -201,6 +206,28 @@ new DataClient({
 ```
 
 Because the version travels with every event, TAMsense can attribute captured behavior to a specific build and compare what users do before and after a change ships — regardless of the order in which features were deployed.
+
+---
+
+## Transport
+
+The SDK is designed to stay out of your app's way when the analytics endpoint is unreachable:
+
+- every upload is a single `fetch` with a `requestTimeout`; there is at most one request in flight at a time
+- after a failure the SDK backs off exponentially (1 s → 30 s) before trying again
+- an event that failed `maxAttempts` times is dropped; the in-memory queue never exceeds `maxQueueBytes`
+- unsent events are persisted to `sessionStorage` when the tab is hidden or unloaded, and picked up after a reload
+
+`navigator.sendBeacon` is used only on `pagehide`, only while the endpoint is known to be healthy, and never with more than `beaconMaxBytes` per payload. Browsers share a single 64 KiB keepalive quota between `sendBeacon` and `fetch(..., { keepalive: true })` across the whole page, so the default leaves at least three quarters of it to your own code. If your app sends its own keepalive requests during unload and you want the full quota, disable beacons entirely:
+
+```js
+new DataClient({
+  apiKey: 'YOUR_API_KEY',
+  beacon: false,
+})
+```
+
+With `beacon: false` the tail of a session is written to `sessionStorage` on unload and uploaded after the next page load in the same tab; it is lost if the tab is closed.
 
 ---
 
