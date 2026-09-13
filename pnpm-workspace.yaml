@@ -1,6 +1,3 @@
-packages:
-    - '.'
-
 shellEmulator: true
 
 trustPolicy: no-downgrade
@@ -9,6 +6,8 @@ trustPolicy: no-downgrade
 # reads as a trust downgrade. Publisher is still paulmillr, the package author, and
 # tsup@8 pins ^4.0.3 — so there is no signed version we can move to.
 trustPolicyExclude: [chokidar]
+
+packages: [.]
 
 allowBuilds:
     esbuild: true
