@@ -1,7 +1,7 @@
 {
     "name": "@tamsensedev/dataclient",
     "type": "module",
-    "version": "0.2.12",
+    "version": "0.3.0",
     "description": "Session replay & product analytics SDK for web apps",
     "license": "MIT",
     "homepage": "https://tamsense.com",
@@ -37,6 +37,7 @@
         "clean": "rimraf dist",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
+        "test": "node --experimental-strip-types --test test/*.test.ts",
         "version:patch": "npm version patch & git push --tags"
     },
     "dependencies": {

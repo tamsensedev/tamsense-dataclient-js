@@ -113,6 +113,8 @@ const client = new DataClient({
 | `maxQueueBytes` | `number` | `2097152` | In-memory queue cap (2 MB). Oldest events are dropped first. |
 | `beacon` | `boolean` | `true` | Use `navigator.sendBeacon` on `pagehide`. Set to `false` if your app relies on the browser's keepalive quota during unload. |
 | `beaconMaxBytes` | `number` | `16000` | Upper bound of a single `sendBeacon` payload. |
+| `decorateLinks` | `boolean` | `true` | Carry the campaign marks of the session to your other sites. See [Campaign marks](#campaign-marks). |
+| `linkDomains` | `string[]` | `[]` | Your sites on other domains that should receive the marks too, like `['app.example.io']`. Sites under the same domain, like `example.com` and `app.example.com`, are covered without it. |
 
 ### `client.setUser(userId)`
 
@@ -121,6 +123,20 @@ Link the current session to an authenticated user.
 ```js
 client.setUser('user_123')
 ```
+
+### `client.getMarks()`
+
+The campaign marks the current session came with: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` and `tsr`. Only the marks that were present are returned.
+
+```js
+const marks = client.getMarks() // { utm_campaign: 'wave-3', tsr: 'a1b2' }
+```
+
+### Campaign marks
+
+When a page opens with `utm_*` parameters or `tsr` in its address, the SDK keeps them for the session and records them once, together with the site the visitor came from. `tsr` is a mark of one person: put a different value into the link of every recipient, and TAMsense shows which sessions belong to whom.
+
+When the visitor follows a link from your landing page to your app on another site, the SDK adds the same marks to that link, so the app knows where the visitor came from. Marks already present in the link are kept. Call `setUser()` after sign-up, and the marks are linked to the new user.
 
 ### `client.excludeSession(reason?)`
 
