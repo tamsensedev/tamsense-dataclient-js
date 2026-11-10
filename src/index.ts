@@ -1,13 +1,16 @@
 import type { Config, Tracker } from './types'
+import type { Marks } from './utils/marks'
 import { setInputMasking } from './dom/mask'
 import { ActionTracker } from './trackers/action'
 import { MutationTracker } from './trackers/mutation'
 import { RrwebTracker } from './trackers/rrweb'
 import { SnapshotTracker } from './trackers/snapshot'
 import { clearSession, getDeviceId, getSessionId, touchSession } from './utils/identity'
+import { externalReferrer, hasMarks, isProjectLink, marksOfUrl, readSessionMarks, sameMarks, withMarks, writeSessionMarks } from './utils/marks'
 import { Sender } from './utils/sender'
 
 export type * from './types'
+export type { MarkParam, Marks } from './utils/marks'
 
 const defaults: Config = {
     endpoint: 'https://my.tamsense.com/api/events',
@@ -29,6 +32,8 @@ const defaults: Config = {
     maxQueueBytes: 2 * 1024 * 1024,
     beacon: true,
     beaconMaxBytes: 16_000,
+    decorateLinks: true,
+    linkDomains: [],
 }
 
 const VALID_ATTR_NAME = /^[a-z][\w-]*$/i
@@ -46,6 +51,7 @@ export class DataClient {
     private scopeCheckScheduled = false
     private activityHandler: (() => void) | null = null
     private activityTarget: EventTarget | null = null
+    private marks: Marks = {}
 
     constructor(options?: Partial<Config>) {
         this.config = { ...defaults, ...options }
@@ -72,6 +78,14 @@ export class DataClient {
             this.trackers.forEach(t => t.beforeUnload?.())
             this.sender?.flushOnUnload()
         })
+        for (const type of ['click', 'auxclick', 'contextmenu']) {
+            document.addEventListener(type, event => this.decorateLink(event), true)
+        }
+    }
+
+    // Метки, с которыми пришла текущая сессия: например, чтобы сохранить их при регистрации
+    getMarks(): Marks {
+        return { ...this.marks }
     }
 
     setUser(userId: string) {
@@ -219,11 +233,37 @@ export class DataClient {
         if (this.userId) {
             this.sender.add({ event: 'identify', timestamp: new Date().toISOString(), user_id: this.userId })
         }
+        this.recordMarks(sessionId)
 
         this.resetIdleTimer()
 
         if (this.config.debug) {
             console.log(`[dataclient] Session started: ${sessionId}`)
+        }
+    }
+
+    // Новые метки из адреса уходят событием сразу; сайт, откуда пришли, записывается один раз на сессию
+    private recordMarks(sessionId: string) {
+        const fromUrl = marksOfUrl(location.href)
+        const saved = readSessionMarks(this.config.sessionIdKey)
+        const known = saved?.sessionId === sessionId ? saved.marks : null
+        const isNew = hasMarks(fromUrl) && !(known !== null && sameMarks(known, fromUrl))
+        const referrer = known === null ? externalReferrer(document.referrer, location.hostname) : ''
+        this.marks = isNew ? fromUrl : known ?? {}
+        writeSessionMarks(this.config.sessionIdKey, { sessionId, marks: this.marks })
+        if (isNew || referrer) {
+            this.sender?.add({ event: 'marks', timestamp: new Date().toISOString(), marks: this.marks, referrer, landing_url: `${location.origin}${location.pathname}` })
+        }
+    }
+
+    // Переход на другой сайт проекта уносит метки с собой: там их прочитает тот же трекер
+    private decorateLink(event: Event) {
+        if (!this.config.decorateLinks || !hasMarks(this.marks) || !(event.target instanceof Element)) {
+            return
+        }
+        const anchor = event.target.closest('a[href]')
+        if (anchor instanceof HTMLAnchorElement && isProjectLink(anchor.hostname, location.hostname, this.config.linkDomains)) {
+            anchor.href = withMarks(anchor.href, this.marks)
         }
     }
 

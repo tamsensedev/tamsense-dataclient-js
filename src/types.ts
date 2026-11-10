@@ -1,3 +1,5 @@
+import type { Marks } from './utils/marks'
+
 export interface Rect {
     x: number
     y: number
@@ -85,13 +87,22 @@ export interface ExcludeEvent {
     reason: string
 }
 
+// Метки перехода сессии: utm, tsr и сайт, откуда пришли; landing_url без запроса
+export interface MarksEvent {
+    event: 'marks'
+    timestamp: string
+    marks: Marks
+    referrer: string
+    landing_url: string
+}
+
 export interface RrwebEvent {
     event: 'rrweb'
     timestamp: string
     rrwebEvent: { type: number, [key: string]: unknown }
 }
 
-export type SceneEvent = SnapshotEvent | MutationEvent | ActionEvent | RrwebEvent | IdentifyEvent | ExcludeEvent
+export type SceneEvent = SnapshotEvent | MutationEvent | ActionEvent | RrwebEvent | IdentifyEvent | ExcludeEvent | MarksEvent
 
 export interface Config {
     endpoint: string
@@ -113,6 +124,9 @@ export interface Config {
     maxQueueBytes: number
     beacon: boolean
     beaconMaxBytes: number
+    // дописывать метки к ссылкам на другие сайты проекта; linkDomains: такие сайты, кроме сайтов того же домена второго уровня
+    decorateLinks: boolean
+    linkDomains: string[]
     version?: string
 }
 
