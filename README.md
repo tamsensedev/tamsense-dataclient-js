@@ -138,6 +138,8 @@ When a page opens with `utm_*` parameters or `tsr` in its address, the SDK keeps
 
 When the visitor follows a link from your landing page to your app on another site, the SDK adds the same marks to that link, so the app knows where the visitor came from. Marks already present in the link are kept. Call `setUser()` after sign-up, and the marks are linked to the new user.
 
+The link also gets `tsfrom`, the ID of the current session, even when there are no marks. The SDK on the other site records it, and TAMsense joins the two sessions: you see what the visitor read on the landing page and what they did in the app next. Keep the parameter when your app redirects, for example from `/` to the sign-in page, or the app session starts without it.
+
 ### `client.excludeSession(reason?)`
 
 Exclude the current session from analytics. Stops all tracking immediately.

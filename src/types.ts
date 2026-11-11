@@ -87,13 +87,14 @@ export interface ExcludeEvent {
     reason: string
 }
 
-// Метки перехода сессии: utm, tsr и сайт, откуда пришли; landing_url без запроса
+// Метки перехода сессии: utm, tsr и сайт, откуда пришли; landing_url без запроса; from_session: сессия другого сайта проекта, откуда перешли
 export interface MarksEvent {
     event: 'marks'
     timestamp: string
     marks: Marks
     referrer: string
     landing_url: string
+    from_session: string
 }
 
 export interface RrwebEvent {
