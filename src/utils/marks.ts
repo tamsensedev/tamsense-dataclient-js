@@ -1,19 +1,22 @@
 // Метки перехода: utm кампании и tsr, метка одного человека из письма. Трекер берёт их из адреса страницы, держит на сессию
-// и дописывает к ссылкам на другие сайты того же проекта, чтобы продукт знал, откуда человек пришёл на лендинг
+// и дописывает к ссылкам на другие сайты того же проекта вместе с номером сессии, чтобы продукт знал, откуда человек пришёл
 
 export const MARK_PARAMS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'tsr'] as const
 export type MarkParam = typeof MARK_PARAMS[number]
 export type Marks = Partial<Record<MarkParam, string>>
+export const FROM_SESSION_PARAM = 'tsfrom'
 
 export interface SessionMarks {
     sessionId: string
     marks: Marks
+    fromSession: string
 }
 
 const MAX_MARK_LENGTH = 200
 const MARKS_KEY_SUFFIX = '_marks'
 const IP_OR_LOCAL = /^(?:\d+\.){3}\d+$|^localhost$|^\[/
 const WILDCARD_PREFIX = /^\*\./
+const SESSION_ID = /^[\w-]{1,64}$/
 
 function parsedUrl(href: string): URL | null {
     try {
@@ -53,10 +56,19 @@ export function externalReferrer(referrer: string, host: string): string {
     return `${url.origin}${url.pathname}`
 }
 
+// Сессия другого сайта проекта, откуда перешли по ссылке; своя же сессия не в счёт
+export function fromSessionOfUrl(href: string, sessionId: string): string {
+    const value = parsedUrl(href)?.searchParams.get(FROM_SESSION_PARAM)?.trim() ?? ''
+    return SESSION_ID.test(value) && value !== sessionId ? value : ''
+}
+
 export function readSessionMarks(key: string): SessionMarks | null {
     try {
-        const parsed = JSON.parse(sessionStorage.getItem(`${key}${MARKS_KEY_SUFFIX}`) ?? 'null') as SessionMarks | null
-        return typeof parsed?.sessionId === 'string' && typeof parsed.marks === 'object' && parsed.marks !== null ? parsed : null
+        const parsed = JSON.parse(sessionStorage.getItem(`${key}${MARKS_KEY_SUFFIX}`) ?? 'null') as Partial<SessionMarks> | null
+        if (typeof parsed?.sessionId !== 'string' || typeof parsed.marks !== 'object' || parsed.marks === null) {
+            return null
+        }
+        return { sessionId: parsed.sessionId, marks: parsed.marks, fromSession: typeof parsed.fromSession === 'string' ? parsed.fromSession : '' }
     }
     catch {
         return null
@@ -96,8 +108,8 @@ export function isProjectLink(host: string, currentHost: string, linkDomains: re
     return site !== null && site === siteOf(host)
 }
 
-// Метки дописываются только те, которых в ссылке ещё нет: свои метки ссылки важнее
-export function withMarks(href: string, marks: Marks): string {
+// Метки дописываются только те, которых в ссылке ещё нет: свои метки ссылки важнее. Номер сессии всегда текущий
+export function withMarks(href: string, marks: Marks, sessionId: string | null): string {
     const url = parsedUrl(href)
     if (!url) {
         return href
@@ -107,6 +119,9 @@ export function withMarks(href: string, marks: Marks): string {
         if (value && !url.searchParams.has(name)) {
             url.searchParams.set(name, value)
         }
+    }
+    if (sessionId) {
+        url.searchParams.set(FROM_SESSION_PARAM, sessionId)
     }
     return url.toString()
 }

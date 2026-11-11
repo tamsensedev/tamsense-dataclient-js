@@ -6,7 +6,7 @@ import { MutationTracker } from './trackers/mutation'
 import { RrwebTracker } from './trackers/rrweb'
 import { SnapshotTracker } from './trackers/snapshot'
 import { clearSession, getDeviceId, getSessionId, touchSession } from './utils/identity'
-import { externalReferrer, hasMarks, isProjectLink, marksOfUrl, readSessionMarks, sameMarks, withMarks, writeSessionMarks } from './utils/marks'
+import { externalReferrer, fromSessionOfUrl, hasMarks, isProjectLink, marksOfUrl, readSessionMarks, sameMarks, withMarks, writeSessionMarks } from './utils/marks'
 import { Sender } from './utils/sender'
 
 export type * from './types'
@@ -52,6 +52,7 @@ export class DataClient {
     private activityHandler: (() => void) | null = null
     private activityTarget: EventTarget | null = null
     private marks: Marks = {}
+    private fromSession = ''
 
     constructor(options?: Partial<Config>) {
         this.config = { ...defaults, ...options }
@@ -242,28 +243,41 @@ export class DataClient {
         }
     }
 
-    // Новые метки из адреса уходят событием сразу; сайт, откуда пришли, записывается один раз на сессию
+    // Новые метки и новая сессия, откуда пришли по ссылке, уходят событием сразу; сайт, откуда пришли, записывается один раз на сессию
     private recordMarks(sessionId: string) {
-        const fromUrl = marksOfUrl(location.href)
+        const marksInUrl = marksOfUrl(location.href)
+        const fromSessionInUrl = fromSessionOfUrl(location.href, sessionId)
         const saved = readSessionMarks(this.config.sessionIdKey)
-        const known = saved?.sessionId === sessionId ? saved.marks : null
-        const isNew = hasMarks(fromUrl) && !(known !== null && sameMarks(known, fromUrl))
+        const known = saved?.sessionId === sessionId ? saved : null
+        const hasNewMarks = hasMarks(marksInUrl) && !(known !== null && sameMarks(known.marks, marksInUrl))
+        const hasNewSource = fromSessionInUrl !== '' && fromSessionInUrl !== known?.fromSession
         const referrer = known === null ? externalReferrer(document.referrer, location.hostname) : ''
-        this.marks = isNew ? fromUrl : known ?? {}
-        writeSessionMarks(this.config.sessionIdKey, { sessionId, marks: this.marks })
-        if (isNew || referrer) {
-            this.sender?.add({ event: 'marks', timestamp: new Date().toISOString(), marks: this.marks, referrer, landing_url: `${location.origin}${location.pathname}` })
+        this.marks = hasNewMarks ? marksInUrl : known?.marks ?? {}
+        this.fromSession = fromSessionInUrl || known?.fromSession || ''
+        writeSessionMarks(this.config.sessionIdKey, { sessionId, marks: this.marks, fromSession: this.fromSession })
+        if (hasNewMarks || hasNewSource || referrer) {
+            this.sender?.add({
+                event: 'marks',
+                timestamp: new Date().toISOString(),
+                marks: this.marks,
+                referrer,
+                landing_url: `${location.origin}${location.pathname}`,
+                from_session: this.fromSession,
+            })
         }
     }
 
-    // Переход на другой сайт проекта уносит метки с собой: там их прочитает тот же трекер
+    // Переход на другой сайт проекта уносит метки и номер сессии: там их прочитает тот же трекер и свяжет две сессии
     private decorateLink(event: Event) {
-        if (!this.config.decorateLinks || !hasMarks(this.marks) || !(event.target instanceof Element)) {
+        if (!this.config.decorateLinks || !(event.target instanceof Element)) {
+            return
+        }
+        if (!this.sessionId && !hasMarks(this.marks)) {
             return
         }
         const anchor = event.target.closest('a[href]')
         if (anchor instanceof HTMLAnchorElement && isProjectLink(anchor.hostname, location.hostname, this.config.linkDomains)) {
-            anchor.href = withMarks(anchor.href, this.marks)
+            anchor.href = withMarks(anchor.href, this.marks, this.sessionId)
         }
     }
 

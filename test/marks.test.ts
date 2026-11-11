@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 // eslint-disable-next-line test/no-import-node-test
 import { test } from 'node:test'
-import { externalReferrer, hasMarks, isProjectLink, marksOfUrl, sameMarks, withMarks } from '../src/utils/marks.ts'
+import { externalReferrer, fromSessionOfUrl, hasMarks, isProjectLink, marksOfUrl, sameMarks, withMarks } from '../src/utils/marks.ts'
 
 test('marks are read from the address, trimmed and cut, and other parameters are left alone', () => {
     assert.deepEqual(marksOfUrl('https://tamsense.com/?utm_source=email&utm_campaign=wave-3&tsr=a1b2&ref=x'), { utm_source: 'email', utm_campaign: 'wave-3', tsr: 'a1b2' })
@@ -31,6 +31,20 @@ test('links to other sites of the same domain or of the listed domains carry the
 })
 
 test('the marks are added to a link without replacing its own', () => {
-    assert.equal(withMarks('https://my.tamsense.com/auth/register?plan=pro', { utm_campaign: 'wave-3', tsr: 'a1' }), 'https://my.tamsense.com/auth/register?plan=pro&utm_campaign=wave-3&tsr=a1')
-    assert.equal(withMarks('https://my.tamsense.com/?utm_campaign=own', { utm_campaign: 'wave-3' }), 'https://my.tamsense.com/?utm_campaign=own')
+    assert.equal(withMarks('https://my.tamsense.com/auth/register?plan=pro', { utm_campaign: 'wave-3', tsr: 'a1' }, null), 'https://my.tamsense.com/auth/register?plan=pro&utm_campaign=wave-3&tsr=a1')
+    assert.equal(withMarks('https://my.tamsense.com/?utm_campaign=own', { utm_campaign: 'wave-3' }, null), 'https://my.tamsense.com/?utm_campaign=own')
+})
+
+test('a link carries the current session even without marks, and replaces an older one', () => {
+    assert.equal(withMarks('https://my.tamsense.com/', {}, 'mh2k-abc'), 'https://my.tamsense.com/?tsfrom=mh2k-abc')
+    assert.equal(withMarks('https://my.tamsense.com/?tsfrom=old&utm_content=hero', { tsr: 'a1' }, 'mh2k-abc'), 'https://my.tamsense.com/?tsfrom=mh2k-abc&utm_content=hero&tsr=a1')
+    assert.equal(withMarks('not a url', {}, 'mh2k-abc'), 'not a url')
+})
+
+test('the session a visitor came from is read from the address, but never the own one or a foreign string', () => {
+    assert.equal(fromSessionOfUrl('https://my.tamsense.com/?tsfrom=mh2k-abc', 'own-1'), 'mh2k-abc')
+    assert.equal(fromSessionOfUrl('https://my.tamsense.com/?tsfrom=own-1', 'own-1'), '')
+    assert.equal(fromSessionOfUrl('https://my.tamsense.com/?tsfrom=%3Cscript%3E', 'own-1'), '')
+    assert.equal(fromSessionOfUrl(`https://my.tamsense.com/?tsfrom=${'a'.repeat(65)}`, 'own-1'), '')
+    assert.equal(fromSessionOfUrl('https://my.tamsense.com/', 'own-1'), '')
 })
