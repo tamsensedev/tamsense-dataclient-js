@@ -1,6 +1,15 @@
 import { MASK_SELECTOR } from '../constants'
 
 let maskAllInputs = true
+let maskEverything = false
+let maskSelectorText = MASK_SELECTOR
+let blockSelectorText: string | null = null
+
+export interface PrivacyOptions {
+    maskEverything: boolean
+    hide: string[]
+    skip: string[]
+}
 
 export function setInputMasking(enabled: boolean) {
     maskAllInputs = enabled
@@ -10,15 +19,48 @@ export function isInputMaskingEnabled(): boolean {
     return maskAllInputs
 }
 
+export function setPrivacy(options: PrivacyOptions) {
+    maskEverything = options.maskEverything
+    maskSelectorText = [MASK_SELECTOR, ...options.hide, ...options.skip].join(', ')
+    blockSelectorText = options.skip.length > 0 ? options.skip.join(', ') : null
+}
+
+export function isMaskingEverything(): boolean {
+    return maskEverything
+}
+
+export function maskSelector(): string {
+    return maskSelectorText
+}
+
+export function blockSelector(): string | null {
+    return blockSelectorText
+}
+
+export function usableSelectors(selectors: string[]): string[] {
+    const probe = document.createDocumentFragment()
+    return selectors.filter((selector) => {
+        try {
+            probe.querySelector(selector)
+            return true
+        }
+        catch {
+            return false
+        }
+    })
+}
+
 const INPUT_TAGS = new Set(['input', 'textarea', 'select'])
 
-export function isUserInputElement(el: Element | Node | null): boolean {
+function elementOf(el: Element | Node | null): Element | null {
     if (!el) {
-        return false
+        return null
     }
-    const element = el.nodeType === Node.ELEMENT_NODE
-        ? el as Element
-        : el.parentElement
+    return el.nodeType === Node.ELEMENT_NODE ? el as Element : el.parentElement
+}
+
+export function isUserInputElement(el: Element | Node | null): boolean {
+    const element = elementOf(el)
     if (!element) {
         return false
     }
@@ -28,13 +70,24 @@ export function isUserInputElement(el: Element | Node | null): boolean {
     return (element as HTMLElement).isContentEditable === true
 }
 
+export function isPasswordField(el: Element | Node | null): boolean {
+    return el instanceof HTMLInputElement && el.type === 'password'
+}
+
+export function isTypedValueMasked(el: Element): boolean {
+    return (maskAllInputs && isUserInputElement(el)) || isPasswordField(el)
+}
+
 export function isMasked(el: Element | Node | null): boolean {
-    if (!el)
+    const element = elementOf(el)
+    if (!element) {
         return false
-    const element = el.nodeType === Node.ELEMENT_NODE
-        ? el as Element
-        : el.parentElement
-    return !!element?.closest(MASK_SELECTOR)
+    }
+    return maskEverything || !!element.closest(maskSelectorText)
+}
+
+export function isBlocked(el: Element): boolean {
+    return blockSelectorText !== null && !!el.closest(blockSelectorText)
 }
 
 export function maskText(text: string): string {

@@ -115,6 +115,7 @@ const client = new DataClient({
 | `beaconMaxBytes` | `number` | `16000` | Upper bound of a single `sendBeacon` payload. |
 | `decorateLinks` | `boolean` | `true` | Carry the campaign marks of the session to your other sites. See [Campaign marks](#campaign-marks). |
 | `linkDomains` | `string[]` | `[]` | Your sites on other domains that should receive the marks too, like `['app.example.io']`. Sites under the same domain, like `example.com` and `app.example.com`, are covered without it. |
+| `remoteSettings` | `boolean` | `true` | Read the privacy settings of the project from TAMsense before recording. See [Privacy settings from TAMsense](#privacy-settings-from-tamsense). |
 
 ### `client.setUser(userId)`
 
@@ -171,6 +172,16 @@ To mask other sensitive content (not just inputs), add the `dataclient-mask` att
   <input value="secret">  <!-- "******" -->
 </div>
 ```
+
+### Privacy settings from TAMsense
+
+Since 0.4 the tracker reads the privacy settings of the project from TAMsense (Settings → Connections → Tracker → Privacy and people), so they change without touching the code of the site:
+
+- **What recordings hide**: everything, what people type (the default), or only what is marked.
+- **Rules**: a CSS selector hides a part of a page or keeps it out of the recording; a path like `/billing/*` keeps whole pages out.
+- **Leave out your team**: visits from the listed IP addresses are not recorded at all, and a session stops counting once someone signs in with a team email through `setUser()`.
+
+The settings are applied in the browser before anything is sent. The tracker keeps the last settings in `localStorage` and refreshes them on every page load; on the very first visit it waits for them up to 1.5 s. `maskAllInputs: false` and the `dataclient-mask` attribute keep working on top of them. Set `remoteSettings: false` to record with the options of the code only.
 
 ---
 
