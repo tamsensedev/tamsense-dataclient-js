@@ -128,6 +128,7 @@ export interface Config {
     // дописывать метки к ссылкам на другие сайты проекта; linkDomains: такие сайты, кроме сайтов того же домена второго уровня
     decorateLinks: boolean
     linkDomains: string[]
+    remoteSettings: boolean
     version?: string
 }
 

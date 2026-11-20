@@ -1,7 +1,7 @@
 import type { SerializedNode } from '../types'
 import { RECORD_ATTRS, SKIP_TAGS } from '../constants'
 import { getElementIcon } from './icon'
-import { isInputMaskingEnabled, isMasked, isUserInputElement, maskText } from './mask'
+import { isBlocked, isInputMaskingEnabled, isMasked, isUserInputElement, maskText } from './mask'
 
 let nextId = 1
 const nodeToId = new WeakMap<Node, number>()
@@ -103,7 +103,7 @@ function getRect(el: HTMLElement): SerializedNode['rect'] {
 
 function collectNode(el: HTMLElement, out: SerializedNode[]): SerializedNode | null {
     const tag = el.tagName?.toLowerCase()
-    if (!tag || SKIP_TAGS.has(tag)) {
+    if (!tag || SKIP_TAGS.has(tag) || isBlocked(el)) {
         return null
     }
     if (!isVisible(el)) {

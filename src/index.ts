@@ -1,6 +1,7 @@
 import type { Config, Tracker } from './types'
 import type { Marks } from './utils/marks'
-import { setInputMasking } from './dom/mask'
+import type { RemoteSettings } from './utils/settings'
+import { setInputMasking, setPrivacy, usableSelectors } from './dom/mask'
 import { ActionTracker } from './trackers/action'
 import { MutationTracker } from './trackers/mutation'
 import { RrwebTracker } from './trackers/rrweb'
@@ -8,9 +9,11 @@ import { SnapshotTracker } from './trackers/snapshot'
 import { clearSession, getDeviceId, getSessionId, touchSession } from './utils/identity'
 import { externalReferrer, fromSessionOfUrl, hasMarks, isProjectLink, marksOfUrl, readSessionMarks, sameMarks, withMarks, writeSessionMarks } from './utils/marks'
 import { Sender } from './utils/sender'
+import { DEFAULT_SETTINGS, fetchSettings, isPageSkipped, readCachedSettings, selectorRules, settingsUrl, writeCachedSettings } from './utils/settings'
 
 export type * from './types'
 export type { MarkParam, Marks } from './utils/marks'
+export type { MaskingMode, PrivacyRule, RemoteSettings } from './utils/settings'
 
 const defaults: Config = {
     endpoint: 'https://my.tamsense.com/api/events',
@@ -34,6 +37,7 @@ const defaults: Config = {
     beaconMaxBytes: 16_000,
     decorateLinks: true,
     linkDomains: [],
+    remoteSettings: true,
 }
 
 const VALID_ATTR_NAME = /^[a-z][\w-]*$/i
@@ -53,20 +57,14 @@ export class DataClient {
     private activityTarget: EventTarget | null = null
     private marks: Marks = {}
     private fromSession = ''
+    private settings: RemoteSettings = DEFAULT_SETTINGS
+    private isOff = false
 
     constructor(options?: Partial<Config>) {
         this.config = { ...defaults, ...options }
         this.config.scoped = this.normalizeScoped(this.config.scoped)
-        setInputMasking(this.config.maskAllInputs !== false)
         this.deviceId = getDeviceId(this.config.deviceIdKey)
-
-        if (this.config.scoped) {
-            this.startScopedMode()
-        }
-        else {
-            this.startSession(document.body)
-            this.attachActivityListeners(document)
-        }
+        this.loadSettings()
 
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState !== 'hidden')
@@ -82,6 +80,69 @@ export class DataClient {
         for (const type of ['click', 'auxclick', 'contextmenu']) {
             document.addEventListener(type, event => this.decorateLink(event), true)
         }
+        this.watchNavigation()
+    }
+
+    private loadSettings() {
+        const url = this.config.remoteSettings ? settingsUrl(this.config.endpoint, this.config.apiKey) : null
+        const cached = url ? readCachedSettings(this.config.apiKey) : null
+        if (url && !cached) {
+            void fetchSettings(url).then((fresh) => {
+                if (fresh) {
+                    writeCachedSettings(this.config.apiKey, fresh)
+                }
+                this.begin(fresh ?? DEFAULT_SETTINGS)
+            })
+            return
+        }
+        this.begin(cached ?? DEFAULT_SETTINGS)
+        if (url) {
+            void fetchSettings(url).then(fresh => fresh && writeCachedSettings(this.config.apiKey, fresh))
+        }
+    }
+
+    private begin(settings: RemoteSettings) {
+        this.settings = settings
+        setInputMasking(this.config.maskAllInputs !== false && settings.masking !== 'marked')
+        setPrivacy({
+            maskEverything: settings.masking === 'all',
+            hide: usableSelectors(selectorRules(settings.rules, 'hide')),
+            skip: usableSelectors(selectorRules(settings.rules, 'skip')),
+        })
+        if (!settings.record) {
+            this.isOff = true
+            if (this.config.debug) {
+                console.log('[dataclient] this address is left out by the project: nothing is recorded')
+            }
+            return
+        }
+        if (this.config.scoped) {
+            this.startScopedMode()
+        }
+        else {
+            this.startSession(document.body)
+            this.attachActivityListeners(document)
+        }
+    }
+
+    private isPageLeftOut(): boolean {
+        return isPageSkipped(this.settings.rules, location.pathname)
+    }
+
+    private watchNavigation() {
+        const check = () => {
+            if (this.sender && this.isPageLeftOut()) {
+                this.stopSession()
+            }
+        }
+        for (const method of ['pushState', 'replaceState'] as const) {
+            const original = history[method].bind(history)
+            history[method] = (...args: Parameters<History['pushState']>) => {
+                original(...args)
+                check()
+            }
+        }
+        window.addEventListener('popstate', check)
     }
 
     // Метки, с которыми пришла текущая сессия: например, чтобы сохранить их при регистрации
@@ -170,6 +231,13 @@ export class DataClient {
     }
 
     private onActivity() {
+        if (this.isOff) {
+            return
+        }
+        if (this.sender && this.isPageLeftOut()) {
+            this.stopSession()
+            return
+        }
         if (!this.sender) {
             if (this.config.scoped) {
                 if (!this.rootEl) {
@@ -218,6 +286,9 @@ export class DataClient {
     }
 
     private startSession(root: HTMLElement) {
+        if (this.isOff || this.isPageLeftOut()) {
+            return
+        }
         const sessionId = getSessionId(this.config.sessionIdKey, this.config.idleTimeout)
         this.sessionId = sessionId
 

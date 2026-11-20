@@ -1,8 +1,7 @@
 import type { Config, RrwebEvent, Tracker } from '../types'
 import type { Sender } from '../utils/sender'
 import { record } from 'rrweb'
-import { MASK_SELECTOR } from '../constants'
-import { isInputMaskingEnabled, maskText } from '../dom/mask'
+import { blockSelector, isInputMaskingEnabled, isMaskingEverything, maskSelector, maskText } from '../dom/mask'
 
 export class RrwebTracker implements Tracker {
     private stopFn: (() => void) | null = null
@@ -16,9 +15,10 @@ export class RrwebTracker implements Tracker {
     start() {
         const scoped = this.config.scoped
         const rootIsScoped = !!scoped && this.root !== document.body && this.root.hasAttribute(scoped)
-        const blockSelector = rootIsScoped
+        const outsideScope = rootIsScoped
             ? `:not([${scoped}]):not([${scoped}] *):not(:has([${scoped}])):not(head):not(head *)`
-            : undefined
+            : null
+        const blocked = [outsideScope, blockSelector()].filter(Boolean).join(', ')
 
         this.stopFn = record({
             emit: (event) => {
@@ -31,22 +31,25 @@ export class RrwebTracker implements Tracker {
             },
             recordCrossOriginIframes: false,
             recordCanvas: false,
-            maskTextSelector: isInputMaskingEnabled()
-                ? `${MASK_SELECTOR}, [contenteditable]:not([contenteditable="false"])`
-                : MASK_SELECTOR,
+            maskTextSelector: isMaskingEverything()
+                ? '*'
+                : isInputMaskingEnabled()
+                    ? `${maskSelector()}, [contenteditable]:not([contenteditable="false"])`
+                    : maskSelector(),
             maskTextFn: text => '*'.repeat(text.length),
             maskAllInputs: true,
             maskInputFn: (text, el) => {
                 if (
                     isInputMaskingEnabled()
-                    || el?.closest(MASK_SELECTOR)
+                    || isMaskingEverything()
+                    || el?.closest(maskSelector())
                     || (el instanceof HTMLInputElement && el.type === 'password')
                 ) {
                     return maskText(text)
                 }
                 return text
             },
-            blockSelector,
+            blockSelector: blocked || undefined,
             checkoutEveryNms: this.config.rrwebCheckpointInterval || undefined,
             sampling: {
                 mousemove: false,
