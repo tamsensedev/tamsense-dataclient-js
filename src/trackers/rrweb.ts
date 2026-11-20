@@ -1,7 +1,7 @@
 import type { Config, RrwebEvent, Tracker } from '../types'
 import type { Sender } from '../utils/sender'
 import { record } from 'rrweb'
-import { blockSelector, isInputMaskingEnabled, isMaskingEverything, maskSelector, maskText } from '../dom/mask'
+import { blockSelector, isInputMaskingEnabled, isMaskingEverything, isPasswordField, maskSelector, maskText } from '../dom/mask'
 
 export class RrwebTracker implements Tracker {
     private stopFn: (() => void) | null = null
@@ -43,7 +43,7 @@ export class RrwebTracker implements Tracker {
                     isInputMaskingEnabled()
                     || isMaskingEverything()
                     || el?.closest(maskSelector())
-                    || (el instanceof HTMLInputElement && el.type === 'password')
+                    || isPasswordField(el)
                 ) {
                     return maskText(text)
                 }

@@ -70,6 +70,14 @@ export function isUserInputElement(el: Element | Node | null): boolean {
     return (element as HTMLElement).isContentEditable === true
 }
 
+export function isPasswordField(el: Element | Node | null): boolean {
+    return el instanceof HTMLInputElement && el.type === 'password'
+}
+
+export function isTypedValueMasked(el: Element): boolean {
+    return (maskAllInputs && isUserInputElement(el)) || isPasswordField(el)
+}
+
 export function isMasked(el: Element | Node | null): boolean {
     const element = elementOf(el)
     if (!element) {

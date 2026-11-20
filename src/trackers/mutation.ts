@@ -1,7 +1,7 @@
 import type { AttrChange, Config, MutationAdd, MutationEvent, TextChange, Tracker } from '../types'
 import type { Sender } from '../utils/sender'
 import { WATCH_ATTRS } from '../constants'
-import { isInputMaskingEnabled, isMasked, isUserInputElement, maskText } from '../dom/mask'
+import { isInputMaskingEnabled, isMasked, isTypedValueMasked, isUserInputElement, maskText } from '../dom/mask'
 import { getNodeId, removeNodeId, serializeSubtree } from '../dom/serializer'
 
 export class MutationTracker implements Tracker {
@@ -138,7 +138,7 @@ export class MutationTracker implements Tracker {
                     const attr = m.attributeName
                     let value = el.getAttribute(attr)?.slice(0, 200) ?? null
                     if (value !== null) {
-                        const maskAsInput = attr === 'value' && isInputMaskingEnabled() && isUserInputElement(el)
+                        const maskAsInput = attr === 'value' && isTypedValueMasked(el)
                         if (maskAsInput || ((attr === 'value' || attr === 'placeholder') && isMasked(el))) {
                             value = maskText(value)
                         }
