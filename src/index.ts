@@ -156,6 +156,7 @@ export class DataClient {
     }
 
     excludeSession(reason = '') {
+        this.isOff = true
         this.sender?.add({ event: 'exclude', timestamp: new Date().toISOString(), reason })
         clearSession(this.config.sessionIdKey)
         this.stopSession()
@@ -231,11 +232,10 @@ export class DataClient {
     }
 
     private onActivity() {
-        if (this.isOff) {
-            return
-        }
-        if (this.sender && this.isPageLeftOut()) {
-            this.stopSession()
+        if (this.isOff || this.isPageLeftOut()) {
+            if (this.sender) {
+                this.stopSession()
+            }
             return
         }
         if (!this.sender) {
